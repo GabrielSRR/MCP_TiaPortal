@@ -3716,6 +3716,8 @@ namespace TiaMcpServer.ModelContextProtocol
             " Verifies: DownloadProvider service is available, a network/IP configuration exists in the hardware config." +
             " Returns Ready=true only when all checks pass." +
             " Use this before DownloadToPlc to surface problems early (missing IP, no hardware config, etc.)." +
+            " Meta.downloadRoutes lists every PG/PC interface -> CPU route (best-ranked first, preferred=true when the" +
+            " adapter shares a subnet with the CPU) — check it on a multi-NIC PC (WLAN/VPN/PLCSIM) before downloading." +
             " Does NOT compile — run CompileSoftware first to ensure blocks are consistent.")]
         public static ResponseCheckDownload CheckDownloadReadiness(
             [Description("softwarePath: path to the PLC software in the project tree, e.g. 'PLC_1'")] string softwarePath)
@@ -3738,14 +3740,18 @@ namespace TiaMcpServer.ModelContextProtocol
             " Workflow: Connect → OpenProject → CompileSoftware → CheckDownloadReadiness → DownloadToPlc → GetCpuOnlineState." +
             " On success State=Success or Warning. On Error check Errors[] for details." +
             " Default options (keepActualValues=true, consistentBlocksOnly=true) are safe for most scenarios." +
-            " Set keepActualValues=false only when DB initial values must be reset — this is irreversible.")]
+            " Set keepActualValues=false only when DB initial values must be reset — this is irreversible." +
+            " On a multi-NIC PC the PG/PC interface is picked automatically (the adapter sharing a subnet with the CPU);" +
+            " Meta.pgPcRoute reports which one was used. Override with pgPcInterface / targetIpAddress when the pick is wrong.")]
         public static ResponseDownload DownloadToPlc(
             [Description("softwarePath: path to the PLC software, e.g. 'PLC_1'")] string softwarePath,
             [Description("consistentBlocksOnly: true=download only consistent blocks (safe default), false=download all blocks even inconsistent ones")] bool consistentBlocksOnly = true,
             [Description("keepActualValues: true=preserve current DB actual values (safe default), false=reset all DB values to initial values (irreversible)")] bool keepActualValues = true,
             [Description("startAfterDownload: true=automatically set CPU to RUN after download (default), false=leave CPU in STOP")] bool startAfterDownload = true,
             [Description("stopBeforeDownload: true=automatically stop CPU before download (required for most downloads), false=attempt online download without stopping")] bool stopBeforeDownload = true,
-            [Description("password: optional CPU access password. Required when the CPU has download protection configured. Leave empty for unprotected CPUs.")] string password = "")
+            [Description("password: optional CPU access password. Required when the CPU has download protection configured. Leave empty for unprotected CPUs.")] string password = "",
+            [Description("pgPcInterface: optional PG/PC interface name (substring, case-insensitive), e.g. 'PLCSIM' or 'Realtek'. Leave empty to auto-pick the adapter that shares a subnet with the CPU. Run CheckDownloadReadiness to see the available names.")] string pgPcInterface = "",
+            [Description("targetIpAddress: optional CPU IP to download to, e.g. '192.168.0.1'. Disambiguates which route to use when the project has several CPU interfaces. Leave empty to auto-pick.")] string targetIpAddress = "")
         {
             try
             {
@@ -3755,7 +3761,9 @@ namespace TiaMcpServer.ModelContextProtocol
                     keepActualValues,
                     startAfterDownload,
                     stopBeforeDownload,
-                    string.IsNullOrWhiteSpace(password) ? null : password);
+                    string.IsNullOrWhiteSpace(password) ? null : password,
+                    string.IsNullOrWhiteSpace(pgPcInterface) ? null : pgPcInterface,
+                    string.IsNullOrWhiteSpace(targetIpAddress) ? null : targetIpAddress);
 
                 if (result.Ok == false && result.Errors != null && result.Errors.Length > 0)
                     throw new McpException(

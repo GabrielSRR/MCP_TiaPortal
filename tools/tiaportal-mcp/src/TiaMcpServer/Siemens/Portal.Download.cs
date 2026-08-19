@@ -47,11 +47,13 @@ namespace TiaMcpServer.Siemens
             bool keepActualValues = true,
             bool startAfterDownload = true,
             bool stopBeforeDownload = true,
-            string? password = null)
+            string? password = null,
+            string? pgPcInterface = null,
+            string? targetIpAddress = null)
         {
             _logger?.LogInformation(
-                "DownloadToPlc: softwarePath={SoftwarePath} consistentOnly={C} keepDB={K} start={S} stop={T} hasPassword={P}",
-                softwarePath, consistentBlocksOnly, keepActualValues, startAfterDownload, stopBeforeDownload, !string.IsNullOrEmpty(password));
+                "DownloadToPlc: softwarePath={SoftwarePath} consistentOnly={C} keepDB={K} start={S} stop={T} hasPassword={P} pgPc={I} targetIp={A}",
+                softwarePath, consistentBlocksOnly, keepActualValues, startAfterDownload, stopBeforeDownload, !string.IsNullOrEmpty(password), pgPcInterface, targetIpAddress);
 
             if (IsProjectNull())
                 return new ResponseDownload { Ok = false, Message = "No project open." };
@@ -59,6 +61,9 @@ namespace TiaMcpServer.Siemens
             var plcSoftware = GetPlcSoftware(softwarePath);
             if (plcSoftware == null)
                 return new ResponseDownload { Ok = false, Message = $"PLC software not found: '{softwarePath}'." };
+
+            // Declared outside the try so the catch can report which PG/PC route was used.
+            DownloadRouteSelection? routeDiagnostics = null;
 
             try
             {
@@ -101,7 +106,17 @@ namespace TiaMcpServer.Siemens
                 // ConfigurationTargetInterface (Modes -> PcInterfaces -> TargetInterfaces) DOES.
                 // Select a target interface (applying its route) and pass THAT to Download();
                 // fall back to the raw configuration if no route is selectable.
-                object? downloadConfig = TrySelectDownloadTargetInterface(configuration) ?? configuration;
+                routeDiagnostics = SelectDownloadRoute(configuration, pgPcInterface, targetIpAddress);
+                if (routeDiagnostics.Error != null)
+                    return new ResponseDownload
+                    {
+                        Ok = false,
+                        Message = routeDiagnostics.Error,
+                        Errors = new[] { routeDiagnostics.Error }
+                    };
+
+                object? downloadConfig = routeDiagnostics.Configuration ?? configuration;
+                _logger?.LogInformation("DownloadToPlc: PG/PC route = {Route}", routeDiagnostics.Description);
 
                 // Resolve the 4-arg overload Download(IConfiguration, pre, post, DownloadOptions)
                 // and invoke via reflection (the parameter is typed IConfiguration).
@@ -129,7 +144,7 @@ namespace TiaMcpServer.Siemens
                 if (rawResult is not DownloadResult result)
                     return new ResponseDownload { Ok = false, Message = "Download returned an unexpected result type." };
 
-                return BuildDownloadResponse(result, softwarePath);
+                return BuildDownloadResponse(result, softwarePath, routeDiagnostics);
             }
             catch (Exception ex)
             {
@@ -139,55 +154,232 @@ namespace TiaMcpServer.Siemens
                 var real = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
                     ? tie.InnerException : ex;
                 _logger?.LogError(real, "DownloadToPlc failed for {SoftwarePath}", softwarePath);
+
+                // A connection failure is usually the wrong PG/PC adapter on a multi-NIC PC, so
+                // always show which route was used and what else was available (issue #14).
+                var routeHint = routeDiagnostics == null
+                    ? string.Empty
+                    : $" Route used: {routeDiagnostics.Description}."
+                      + (routeDiagnostics.Candidates.Count > 1
+                          ? $" Available routes: {DescribeRoutes(routeDiagnostics.Candidates)}."
+                            + " Pass pgPcInterface / targetIpAddress to DownloadToPlc to pick one explicitly."
+                          : string.Empty);
+
                 return new ResponseDownload
                 {
                     Ok = false,
-                    Message = $"Download failed: {real.Message}",
+                    Message = $"Download failed: {real.Message}{routeHint}",
                     Errors = new[] { real.Message }
                 };
             }
         }
 
-        // V21: ConnectionConfiguration.ApplyConfiguration(ConfigurationTargetInterface) returns the
-        // IConfiguration that DownloadProvider.Download() requires. Navigate
-        // Modes -> PcInterfaces -> TargetInterfaces, pick the first target, and apply it. Returns the
-        // applied IConfiguration, or null when no route is selectable (caller falls back to the raw
-        // configuration). NOTE: picks the FIRST PG/PC interface — on a multi-NIC PC confirm the
-        // adapter facing the CPU.
-        private static object? TrySelectDownloadTargetInterface(object? connectionConfiguration)
+        // ---- PG/PC route selection (issue #14) --------------------------------------------------
+        // V21: ConnectionConfiguration.ApplyConfiguration(ConfigurationTargetInterface) returns a
+        // bool (whether the online route applied) — it does NOT return the IConfiguration. The
+        // ConfigurationTargetInterface itself IS an IConfiguration (verified against the V21
+        // PublicAPI), so we hand the target to Download().
+        //
+        // The route tree is Modes -> PcInterfaces -> TargetInterfaces. Picking the FIRST applicable
+        // target was enough on a single-NIC PC, but on a multi-NIC PC (WLAN + VPN + PLCSIM virtual
+        // adapter) TIA enumerates the wrong adapter first and ApplyConfiguration "succeeds" on it
+        // too — it does not verify reachability. The download then leaves through an adapter that
+        // cannot see the CPU and fails with "connection to the target module cannot be established".
+        // So: enumerate every route, rank by IP proximity to the CPU, and apply the best one.
+
+        // One flattened Modes -> PcInterfaces -> TargetInterfaces route, with the addresses on both
+        // ends so the adapter facing the CPU can be identified (and reported back to the caller).
+        private sealed class DownloadRoute
         {
-            if (connectionConfiguration == null) return null;
+            public object Target = null!;
+            public string ModeName = string.Empty;
+            public string PcInterfaceName = string.Empty;
+            public int PcInterfaceNumber;
+            public List<string> PcAddresses = new List<string>();
+            public string TargetName = string.Empty;
+            public List<string> TargetAddresses = new List<string>();
+            public int Score;
+
+            public string Describe() =>
+                $"{ModeName} / {PcInterfaceName}"
+                + (PcAddresses.Count > 0 ? $" [{string.Join(", ", PcAddresses)}]" : " [no IP]")
+                + $" -> {TargetName}"
+                + (TargetAddresses.Count > 0 ? $" [{string.Join(", ", TargetAddresses)}]" : string.Empty);
+        }
+
+        private sealed class DownloadRouteSelection
+        {
+            public object? Configuration;   // what to hand to Download(); null = fall back to the raw configuration
+            public string Description = "(no route selected — raw connection configuration)";
+            public string? Error;           // set when an explicit pgPcInterface/targetIpAddress filter matched nothing
+            public List<DownloadRoute> Candidates = new List<DownloadRoute>();
+        }
+
+        private static List<DownloadRoute> EnumerateDownloadRoutes(object? connectionConfiguration)
+        {
+            var routes = new List<DownloadRoute>();
+            if (connectionConfiguration == null) return routes;
+            foreach (var mode in EnumerateReflectedProperty(connectionConfiguration, "Modes"))
+                foreach (var pcInterface in EnumerateReflectedProperty(mode, "PcInterfaces"))
+                    foreach (var target in EnumerateReflectedProperty(pcInterface, "TargetInterfaces"))
+                    {
+                        if (target == null) continue;
+                        routes.Add(new DownloadRoute
+                        {
+                            Target = target,
+                            ModeName = ReadReflectedString(mode, "Name"),
+                            PcInterfaceName = ReadReflectedString(pcInterface, "Name"),
+                            PcInterfaceNumber = ReadReflectedInt(pcInterface, "Number"),
+                            PcAddresses = ReadConfigurationAddresses(pcInterface),
+                            TargetName = ReadReflectedString(target, "Name"),
+                            TargetAddresses = ReadConfigurationAddresses(target)
+                        });
+                    }
+            return routes;
+        }
+
+        private static string ReadReflectedString(object? owner, string propertyName)
+        {
+            try { return owner?.GetType().GetProperty(propertyName)?.GetValue(owner)?.ToString() ?? string.Empty; }
+            catch { return string.Empty; }
+        }
+
+        private static int ReadReflectedInt(object? owner, string propertyName)
+        {
+            try { return owner?.GetType().GetProperty(propertyName)?.GetValue(owner) is int number ? number : 0; }
+            catch { return 0; }
+        }
+
+        // ConfigurationPcInterface.Addresses = the PG/PC adapter's own IPs.
+        // ConfigurationTargetInterface.Addresses = the CPU interface's IPs.
+        // Both are ConfigurationAddress compositions whose Address property holds the IP string.
+        private static List<string> ReadConfigurationAddresses(object? owner)
+        {
+            var addresses = new List<string>();
+            foreach (var address in EnumerateReflectedProperty(owner, "Addresses"))
+            {
+                var value = ReadReflectedString(address, "Address");
+                if (!string.IsNullOrWhiteSpace(value)) addresses.Add(value);
+            }
+            return addresses;
+        }
+
+        // Rough "can these two adapters see each other" test. ConfigurationAddress exposes only the
+        // address, never the mask, so /24 is an assumption — it holds for the usual 192.168.x.y /
+        // 10.x.y.z engineering subnets, and it is only ever used to RANK candidates, never to reject
+        // a download outright.
+        private static bool SameIpv4Subnet24(string a, string b)
+        {
+            var left = a.Split('.');
+            var right = b.Split('.');
+            if (left.Length != 4 || right.Length != 4) return false;
+            return left[0] == right[0] && left[1] == right[1] && left[2] == right[2];
+        }
+
+        private static void ScoreDownloadRoutes(List<DownloadRoute> routes, string? preferredTargetIp)
+        {
+            foreach (var route in routes)
+            {
+                var score = 0;
+                if (!string.IsNullOrWhiteSpace(preferredTargetIp))
+                {
+                    if (route.TargetAddresses.Any(t => string.Equals(t, preferredTargetIp, StringComparison.OrdinalIgnoreCase)))
+                        score += 8;
+                    if (route.PcAddresses.Any(p => SameIpv4Subnet24(p, preferredTargetIp!)))
+                        score += 4;
+                }
+                // No explicit target IP: the CPU address on the route itself is the reference point.
+                // Prefer the adapter sitting in the same subnet as the CPU it has to reach — that is
+                // exactly what separates the PLCSIM virtual adapter from a WLAN/VPN adapter.
+                if (route.PcAddresses.Any(p => route.TargetAddresses.Any(t => SameIpv4Subnet24(p, t))))
+                    score += 2;
+                route.Score = score;
+            }
+        }
+
+        private static string DescribeRoutes(IEnumerable<DownloadRoute> routes)
+            => string.Join(" | ", routes.Select(r => r.Describe()));
+
+        // Returns the IConfiguration to pass to Download(), or a selection carrying an Error when an
+        // explicit filter matched nothing. Configuration stays null when no route exists at all —
+        // the caller then falls back to the raw connection configuration (old behaviour).
+        private static DownloadRouteSelection SelectDownloadRoute(
+            object? connectionConfiguration,
+            string? pgPcInterface,
+            string? targetIpAddress)
+        {
+            var selection = new DownloadRouteSelection();
+            if (connectionConfiguration == null) return selection;
+
             try
             {
-                // ConnectionConfiguration.ApplyConfiguration(ConfigurationTargetInterface) returns a
-                // bool (whether the online route applied) — it does NOT return the IConfiguration.
-                // The ConfigurationTargetInterface itself IS an IConfiguration (verified against the
-                // V21 PublicAPI), so we return the target and pass it to Download().
+                selection.Candidates = EnumerateDownloadRoutes(connectionConfiguration);
+                if (selection.Candidates.Count == 0) return selection;
+
+                var pool = selection.Candidates;
+
+                if (!string.IsNullOrWhiteSpace(pgPcInterface))
+                {
+                    var byName = pool
+                        .Where(r => r.PcInterfaceName.IndexOf(pgPcInterface, StringComparison.OrdinalIgnoreCase) >= 0)
+                        .ToList();
+                    if (byName.Count == 0)
+                    {
+                        selection.Error =
+                            $"No PG/PC interface matches '{pgPcInterface}'. Available routes: {DescribeRoutes(pool)}";
+                        return selection;
+                    }
+                    pool = byName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(targetIpAddress))
+                {
+                    var byIp = pool
+                        .Where(r => r.TargetAddresses.Any(t => string.Equals(t, targetIpAddress, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+                    if (byIp.Count == 0)
+                    {
+                        selection.Error =
+                            $"No download route reaches target IP '{targetIpAddress}'. Available routes: {DescribeRoutes(pool)}";
+                        return selection;
+                    }
+                    pool = byIp;
+                }
+
+                ScoreDownloadRoutes(pool, targetIpAddress);
+
                 var applyMethod = connectionConfiguration.GetType()
                     .GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(m => m.Name == "ApplyConfiguration"
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.Name == "ConfigurationTargetInterface");
 
-                object? firstTarget = null;
-                foreach (var mode in EnumerateReflectedProperty(connectionConfiguration, "Modes"))
-                    foreach (var pcInterface in EnumerateReflectedProperty(mode, "PcInterfaces"))
-                        foreach (var target in EnumerateReflectedProperty(pcInterface, "TargetInterfaces"))
+                // OrderByDescending is a stable sort, so equal scores keep the original enumeration
+                // order — i.e. the old first-wins behaviour whenever nothing distinguishes adapters.
+                var ranked = pool.OrderByDescending(r => r.Score).ToList();
+
+                foreach (var route in ranked)
+                {
+                    try
+                    {
+                        if (applyMethod?.Invoke(connectionConfiguration, new[] { route.Target }) is bool ok && ok)
                         {
-                            if (target == null) continue;
-                            firstTarget ??= target;
-                            // Prefer a target whose route applies cleanly; ApplyConfiguration is best-effort.
-                            try
-                            {
-                                if (applyMethod?.Invoke(connectionConfiguration, new[] { target }) is bool ok && ok)
-                                    return target;
-                            }
-                            catch { }
+                            selection.Configuration = route.Target;
+                            selection.Description = route.Describe();
+                            return selection;
                         }
-                return firstTarget; // a ConfigurationTargetInterface (implements IConfiguration)
+                    }
+                    catch { }
+                }
+
+                // Nothing applied cleanly — hand back the best-ranked target anyway (it IS an
+                // IConfiguration). Mirrors the previous fallback to the first target.
+                selection.Configuration = ranked[0].Target;
+                selection.Description = ranked[0].Describe() + " (not confirmed by ApplyConfiguration)";
+                return selection;
             }
             catch { }
-            return null;
+            return selection;
         }
 
         // Read a property by name and materialize it as a sequence (Openness compositions are
@@ -219,6 +411,7 @@ namespace TiaMcpServer.Siemens
             bool hasProvider = false;
             bool hasConfig = false;
             bool isConsistent = false;
+            var routes = new List<DownloadRoute>();
 
             try
             {
@@ -231,6 +424,10 @@ namespace TiaMcpServer.Siemens
                     hasConfig = provider!.Configuration != null;
                     if (!hasConfig)
                         issues.Add("No network configuration for this PLC. Set the IP address in hardware configuration.");
+                    else
+                        // Read-only: enumerate the PG/PC routes WITHOUT applying any of them, so a
+                        // multi-NIC PC can be diagnosed before touching the CPU (issue #14).
+                        routes = EnumerateDownloadRoutes(provider.Configuration);
                 }
             }
             catch (Exception ex)
@@ -250,6 +447,20 @@ namespace TiaMcpServer.Siemens
             }
             catch { }
 
+            ScoreDownloadRoutes(routes, null);
+            var routesJson = new JsonArray();
+            foreach (var route in routes.OrderByDescending(r => r.Score))
+                routesJson.Add(new JsonObject
+                {
+                    ["mode"] = route.ModeName,
+                    ["pgPcInterface"] = route.PcInterfaceName,
+                    ["pgPcInterfaceNumber"] = route.PcInterfaceNumber,
+                    ["pgPcAddresses"] = string.Join(", ", route.PcAddresses),
+                    ["targetInterface"] = route.TargetName,
+                    ["targetAddresses"] = string.Join(", ", route.TargetAddresses),
+                    ["preferred"] = route.Score > 0
+                });
+
             bool ready = hasProvider && hasConfig && issues.Count == 0;
             return new ResponseCheckDownload
             {
@@ -260,7 +471,15 @@ namespace TiaMcpServer.Siemens
                 Message = ready
                     ? $"PLC '{softwarePath}' is ready for download."
                     : $"PLC '{softwarePath}' has {issues.Count} readiness issue(s).",
-                Issues = issues.Count > 0 ? issues.ToArray() : null
+                Issues = issues.Count > 0 ? issues.ToArray() : null,
+                Meta = new JsonObject
+                {
+                    ["downloadRouteCount"] = routes.Count,
+                    // Ordered best-first — the same ranking DownloadToPlc applies. preferred=true
+                    // means the PG/PC adapter shares an IPv4 /24 with the CPU it has to reach.
+                    ["downloadRoutes"] = routesJson,
+                    ["note"] = "Override the automatic pick with DownloadToPlc(pgPcInterface:…) or DownloadToPlc(targetIpAddress:…)."
+                }
             };
         }
 
@@ -352,7 +571,10 @@ namespace TiaMcpServer.Siemens
             catch { }
         }
 
-        private ResponseDownload BuildDownloadResponse(DownloadResult result, string softwarePath)
+        private ResponseDownload BuildDownloadResponse(
+            DownloadResult result,
+            string softwarePath,
+            DownloadRouteSelection? route)
         {
             var errors = new List<string>();
             var warnings = new List<string>();
@@ -375,7 +597,11 @@ namespace TiaMcpServer.Siemens
                 {
                     ["softwarePath"] = softwarePath,
                     ["timestamp"] = DateTime.Now,
-                    ["downloadState"] = result.State.ToString()
+                    ["downloadState"] = result.State.ToString(),
+                    // Which PG/PC adapter the download actually left through — the thing you need
+                    // to see first when a multi-NIC PC downloads "successfully" to the wrong place.
+                    ["pgPcRoute"] = route?.Description ?? string.Empty,
+                    ["pgPcRouteCandidates"] = route?.Candidates.Count ?? 0
                 }
             };
         }

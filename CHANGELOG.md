@@ -1,5 +1,14 @@
 # Change Log
 
+## [未发布] - DownloadToPlc 多网卡选错 PG/PC 接口（issue #14）
+
+`DownloadToPlc` 在多网卡机器上报「连接到模块 PLC_1 失败」——WLAN / VPN 虚拟网卡排在 PLCSIM 虚拟网卡前面，而 `ApplyConfiguration` 对物理网卡也返回成功（它不校验可达性），于是下载从一块根本看不见 CPU 的网卡走出去。
+
+- **按 IP 排序选路（自动修）**：`Modes → PcInterfaces → TargetInterfaces` 不再「取第一个能 Apply 的」，而是把全部路由枚举出来打分——**PG/PC 网卡自身 IP 与目标 CPU IP 同一 IPv4 /24 的优先**。真机场景（WLAN 192.168.31.x + VPN 198.18.x.x + PLCSIM 192.168.0.241 → CPU 192.168.0.1）自动选中 PLCSIM 网卡。
+  - 注意：Openness 的 `ConfigurationAddress` 只给地址不给掩码，**/24 是假设**；它只用来给候选**排序**，从不用来否决下载。所有候选同分（例如 PROFIBUS/MPI、或没有网卡在 CPU 网段）时**保持原枚举顺序**，即旧的 first-wins 行为不变。
+- **可显式指定（手动兜底）**：`DownloadToPlc` 新增两个可选入参——`pgPcInterface`（网卡名子串，不区分大小写，如 `PLCSIM` / `Realtek`）与 `targetIpAddress`（目标 CPU IP，如 `192.168.0.1`）。填了却匹配不到，直接报错并**列出全部可用路由**，不会悄悄回落到错的网卡。
+- **可诊断**：`CheckDownloadReadiness` 的 `meta.downloadRoutes` **只读**列出每条「PG/PC 网卡 → CPU 接口」路由及两端 IP（按同一套排序，`preferred=true` 表示同网段），下载前就能看出选路是否合理；`DownloadToPlc` 成功时 `meta.pgPcRoute` 回报实际走的网卡，失败时错误信息附上已用路由 + 全部候选 + 覆盖参数的用法。
+- **验证**：新增 `scripts\Test-DownloadRouteSelection.ps1`——离线、不需要 TIA 连接，用伪造的多网卡对象图跑真实选路代码，覆盖自动选中 PLCSIM / 显式 IP / 显式网卡名 / 两种匹配失败的报错 / 同分回落原顺序，外加一条**必错哨兵**（若哨兵通过说明测试本身坏了）。7 项全过。V21 编译 0 错。
 ## [2.3.1] - 2026-07-25 - 门槛收敛：git clone 开箱即用 + 精简档成为一键配置默认 + lite 补齐金路径工具
 
 围绕「公开版 = 门槛低、好用能用实用」的定位收敛（工具能力零新增，全部是让现有能力更容易被用对）：

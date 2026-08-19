@@ -1,4 +1,4 @@
-using ModelContextProtocol.Server;
+﻿using ModelContextProtocol.Server;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -39,6 +39,11 @@ namespace TiaMcpServer.ModelContextProtocol
             // Golden-path tools referenced by ServerInstructions / GetAuthoringGuide
             // (previously [L2]; without them the lite roster contradicts the instructions)
             "ImportFromDocuments", "GenerateBlocksFromExternalSource",
+            // Batch SD import/export are the "PREFERRED on V21+" batch path in the same
+            // instructions; tag tables and cross-references are what a model needs to read a
+            // project it did not write.
+            "ImportBlocksFromDocuments", "ExportBlocksAsDocuments",
+            "GetPlcTagTables", "GetCrossReferences",
             "GetBlocks", "GetBlocksWithHierarchy", "GetBlockInfo",
             "ExportAsDocuments", "GoOffline",
         };

@@ -1,6 +1,29 @@
 # Change Log
 
-## [未发布] - DownloadToPlc 多网卡选错 PG/PC 接口（issue #14）
+## [2.3.2] - 2026-08-19 - 装得上·连得通·报得准
+
+本轮全部围绕「新机装完到第一次跑通」这一段，工具能力零新增。
+
+- **doctor 从 3 项扩到 6 项，中文环境输出中文**。新增的三项都是新机最常卡住却此前完全不查的：
+  Openness 接口 DLL 能否**真解析**（装了 TIA ≠ 装了 Openness，旧检查只问注册表，于是「体检 OK、
+  首次调用 FileLoadException」）、文件被 Windows 标记为网络来源（MOTW，从下载的 zip 解压即中）、
+  .NET Framework 4.8。CLI `tia doctor` 与 MCP `Doctor` 工具改为共用 `Runtime/EnvironmentDoctor`。
+- **doctor 区分「注册了」与「能用」**：配置从别的机器带过来或交付包换了位置时，条目还在但 exe 已不在，
+  宿主只会静默起不来；现在直接报出失效路径并给出修复命令。
+- **AI 宿主 4 → 8**：新增 Codex(TOML) / Gemini CLI / Windsurf / Cline。Codex 走 TOML 段落合并并写入
+  `startup_timeout_sec = 120`（TIA 启动远超 Codex 默认 10 秒，否则被当成崩溃杀掉）；JSON 写入改为
+  临时文件 + 替换的原子写。
+- **lite 档补 4 个金路径工具**：`ImportBlocksFromDocuments` / `ExportBlocksAsDocuments` /
+  `GetPlcTagTables` / `GetCrossReferences`（42 → 46，仍远低于 VS Code 的 128 上限）。新增
+  `scripts/Check-LiteProfile.py` 把「lite 必须能走完金路径」变成可执行断言。
+- **Validate-Bundle 增加启动器哨兵**：解析每个 `.cmd`/`.bat` 实际会启动的 exe 并核实存在——此前校验
+  脚本与启动器指向不同路径且互不校验。
+- **lad 指南补三条**，均以 1052 个真实 `.s7dcl` 语料核过：每个 NETWORK 前必须有独立
+  `{ S7_Language := "LAD" }` pragma（10147/10147 无一例外）；`P_Trig(mem)` 一参 vs
+  `P_Contact(signal, mem)` 两参；泛型指令模板名随指令而异，报错会列出 `Allowed Template Names`。
+- **分支体例补齐**：新增官方 `v21` / `v20` 版本分支（与 v16~v19 同体例）。双版本共用的改动仍进
+  `master`，只有版本专属适配才进版本分支。
+### 同批合入：DownloadToPlc 多网卡选错 PG/PC 接口（issue #14）
 
 `DownloadToPlc` 在多网卡机器上报「连接到模块 PLC_1 失败」——WLAN / VPN 虚拟网卡排在 PLCSIM 虚拟网卡前面，而 `ApplyConfiguration` 对物理网卡也返回成功（它不校验可达性），于是下载从一块根本看不见 CPU 的网卡走出去。
 

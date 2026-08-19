@@ -79,7 +79,9 @@
 
 | 分支 | 目标版本 | 维护方式 |
 |------|----------|----------|
-| `master` | TIA Portal V20 / V21 | 官方主线 |
+| `master` | TIA Portal V20 / V21 | 官方主线（日常改动都进这里） |
+| `v21` | TIA Portal V21 / Openness V21 | 官方；从 master 派生，只承接 V21 专属适配 |
+| `v20` | TIA Portal V20 / Openness V20 | 官方；从 master 派生，只承接 V20 专属适配 |
 | `v19` | TIA Portal V19 / Openness V19 | 社区贡献 |
 | `v18` | TIA Portal V18 / Openness V18 | 社区贡献 |
 | `v17` | TIA Portal V17 / Openness V17 | 社区贡献 |
@@ -88,6 +90,7 @@
 **怎么贡献**
 
 - 针对某个旧版本的适配 / 修复，请把 PR 提到**对应的版本分支**（如 V17 的改动 → `v17`），不要直接进 `master`。
+- `v21` / `v20` 是官方版本线：**同时适用于两个版本的改动仍然进 `master`**；只有当某个修复会改变另一个版本的行为、或依赖该版本独有的 Openness API 时，才提到对应的版本分支。这样双版本共用的代码只维护一份。
 - 旧版本的 Openness API 与块 XML 差异较大，分支化可以让各版本独立验证、互不影响主线用户。
 - 若某项修复足够通用且稳定，欢迎再单独拆一个小 PR 回 `master`。
 - 提 PR 时请**不要提交**：TIA 工程文件（`.apXX`）、`bin` / `obj`、日志、截图、备份、本机绝对路径产物、临时验证工程。

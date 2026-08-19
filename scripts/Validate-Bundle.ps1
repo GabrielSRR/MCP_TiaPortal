@@ -39,8 +39,13 @@ function Ok([string]$msg) {
 
 Write-Host "Bundle root: $root"
 
-$exe = Join-Path $root "tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe"
-if (-not (Test-Path -LiteralPath $exe)) { Fail "Missing server exe: $exe" } else { Ok "TiaMcpServer.exe present" }
+# 交付 zip 布局在 tools\...\bin\Release\net48；git clone 布局在 runtime\v21。两处任一存在即可。
+$exeCandidates = @(
+    (Join-Path $root "tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe"),
+    (Join-Path $root "runtime\v21\TiaMcpServer.exe")
+)
+$exe = $exeCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $exe) { Fail "Missing server exe (checked: $($exeCandidates -join ' ; '))" } else { Ok "TiaMcpServer.exe present ($exe)" }
 
 $readme = Join-Path $root "README.md"
 if (-not (Test-Path -LiteralPath $readme)) { Fail "Missing README.md" } else { Ok "README.md present" }

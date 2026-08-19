@@ -175,7 +175,10 @@ namespace TiaMcpServer.Cli
                 ? v
                 : (TiaMcpServer.Siemens.Engineering.DetectTiaMajorVersion() ?? 21);
             string exe = McpConfigInstaller.ExeForVersion(ver);
-            bool lite = Flag(args, "--lite"); // ~40 essential tools; best for weaker models / VS Code's 128-tool cap
+            // Default = lite (~42 essential tools): weaker models are not drowned in ~200
+            // choices and VS Code's 128-tool cap never trips. Pass --full for everything;
+            // --lite is still accepted (now a no-op kept for compatibility).
+            bool lite = !Flag(args, "--full");
 
             if (Flag(args, "--print"))
             {
@@ -209,7 +212,7 @@ namespace TiaMcpServer.Cli
             }
 
             Console.WriteLine(done > 0
-                ? $"Configured {done} host(s) for TIA V{ver} -> {exe}{(lite ? " [lite profile: ~40 essential tools]" : "")}. Restart the AI client to load it. (original config backed up as *.bak)"
+                ? $"Configured {done} host(s) for TIA V{ver} -> {exe}{(lite ? " [lite profile: ~42 essential tools — rerun with --full for the whole tool surface]" : " [full profile: all tools]")}. Restart the AI client to load it. (original config backed up as *.bak)"
                 : "No host config written. Targeted host not found, or use `config --print` to copy the snippet manually.");
             Console.WriteLine("For other hosts, run `config --print` and paste the matching snippet.");
             return failed > 0 && done == 0 ? 1 : 0;
@@ -343,12 +346,12 @@ USAGE
   tia export   <project.apXX> --plc NAME --out DIR --block PATH [--scl]
   tia import   <project.apXX> --plc NAME --from DIR [--no-overwrite]
   tia prewarm  [--stop]                                   Hold a headless instance open (~1s attach after)
-  tia config   [--host claude|claude-code|cursor|vscode] [--print] [--lite]
+  tia config   [--host claude|claude-code|cursor|vscode] [--print] [--full]
                                                           One-click: register this MCP into all detected AI hosts
                                                           (Claude Desktop / Claude Code / Cursor / VS Code); auto-picks
                                                           the exe matching your installed TIA version.
-                                                          --lite = expose only ~40 essential tools (best for weaker
-                                                          models and VS Code's 128-tool cap)
+                                                          Default = lite profile (~42 essential tools: safe for weaker
+                                                          models and VS Code's 128-tool cap). --full = all tools.
   tia doctor   [--fix]                                    Environment check: TIA install, exe/version match, Openness
                                                           group, AI host configs. --fix auto-adds the Openness group
   tia schema                                              Print the spec field reference

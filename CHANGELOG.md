@@ -9,6 +9,14 @@
 - **可显式指定（手动兜底）**：`DownloadToPlc` 新增两个可选入参——`pgPcInterface`（网卡名子串，不区分大小写，如 `PLCSIM` / `Realtek`）与 `targetIpAddress`（目标 CPU IP，如 `192.168.0.1`）。填了却匹配不到，直接报错并**列出全部可用路由**，不会悄悄回落到错的网卡。
 - **可诊断**：`CheckDownloadReadiness` 的 `meta.downloadRoutes` **只读**列出每条「PG/PC 网卡 → CPU 接口」路由及两端 IP（按同一套排序，`preferred=true` 表示同网段），下载前就能看出选路是否合理；`DownloadToPlc` 成功时 `meta.pgPcRoute` 回报实际走的网卡，失败时错误信息附上已用路由 + 全部候选 + 覆盖参数的用法。
 - **验证**：新增 `scripts\Test-DownloadRouteSelection.ps1`——离线、不需要 TIA 连接，用伪造的多网卡对象图跑真实选路代码，覆盖自动选中 PLCSIM / 显式 IP / 显式网卡名 / 两种匹配失败的报错 / 同分回落原顺序，外加一条**必错哨兵**（若哨兵通过说明测试本身坏了）。7 项全过。V21 编译 0 错。
+## [2.3.1] - 2026-07-25 - 门槛收敛：git clone 开箱即用 + 精简档成为一键配置默认 + lite 补齐金路径工具
+
+围绕「公开版 = 门槛低、好用能用实用」的定位收敛（工具能力零新增，全部是让现有能力更容易被用对）：
+
+- **git clone 用户开箱即用**：全部启动脚本（`配置MCP*.bat` / `tia*.cmd` / `scripts\生成工程.bat` / `预热.bat`）增加双布局自动回退——先找交付 zip 布局 `tools\...\bin[-v20]\Release\net48`，找不到自动改用 git 布局 `runtime\v21`。此前 git clone 后双击任何脚本都报「找不到引擎 exe」（bat 指向被 .gitignore 排除的 bin 目录）。`cursor-mcp.example.json` 同步修正为真实存在的路径并注明两种布局。
+- **`tia config` 默认写精简档（行为变更）**：一键配置默认带 `TIA_MCP_PROFILE=lite`（约 42 个核心工具）——弱模型不再被 200+ 工具淹没，VS Code 128 工具上限不再爆；要全量工具面显式 `config --full`（`--lite` 仍接受，向后兼容）。服务器侧默认不变：不带环境变量启动仍是全量。
+- **lite 档补齐金路径工具（修 bug）**：lite 此前按描述前缀 `[L0]/[L1]` 过滤，ServerInstructions 金路径主推的 `ImportFromDocuments` / `GenerateBlocksFromExternalSource` / `GetBlocks` / `GetBlocksWithHierarchy` / `GetBlockInfo` / `ExportAsDocuments` / `GoOffline` 却是 L2——弱模型在 lite 档被说明书指去调这些工具时根本看不见。现改为**显式工具名白名单**（42 个，成员不再随描述文案变动漂移），上述 7 个金路径工具全部纳入。
+- **文档一致性**：README 标题不再硬编码版本号（此前停在 v2.2.8 与 Release 脱节）；新增「两种获取方式 exe 路径对照表」；`docs/README.md` 新增按角色导航的文档单一入口；`doctor` 提前为「装完先体检」第一步；`使用说明与介绍` / `CLI_quickstart` 的 exe 路径口径与 README 对齐。
 
 ## [2.3.0] - 2026-07-04 - 新工具 DescribeBlockLogic：把梯形图读成可读逻辑（含"恒断/禁用行"自动标注）
 

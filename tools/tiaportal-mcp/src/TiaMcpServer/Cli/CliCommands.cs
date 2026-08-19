@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -187,6 +187,11 @@ namespace TiaMcpServer.Cli
                 Console.WriteLine();
                 Console.WriteLine("VS Code — %APPDATA%\\Code\\User\\mcp.json (servers):");
                 Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.VsCode, lite));
+                Console.WriteLine();
+                Console.WriteLine("Gemini CLI / Windsurf / Cline use the same mcpServers shape as the first snippet.");
+                Console.WriteLine();
+                Console.WriteLine("Codex — %USERPROFILE%\\.codex\\config.toml (TOML):");
+                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.CodexToml, lite));
                 return 0;
             }
 
@@ -224,62 +229,82 @@ namespace TiaMcpServer.Cli
         private static int DoctorCli(string[] args)
         {
             bool fix = Flag(args, "--fix");
-            Console.WriteLine("tia doctor — environment check" + (fix ? " (fix mode)" : " (read-only; pass --fix to auto-add the Openness group)"));
+            bool zh = Runtime.EnvironmentDoctor.PreferChinese;
+
+            Console.WriteLine(zh
+                ? "tia doctor —— 环境体检" + (fix ? "（修复模式）" : "（只读；加 --fix 可自动把当前用户加入 Openness 组）")
+                : "tia doctor — environment check" + (fix ? " (fix mode)" : " (read-only; pass --fix to auto-add the Openness group)"));
+
             bool ready = true;
 
             void Line(bool ok, string name, string detail, string? fixHint)
             {
                 Console.WriteLine($"  [{(ok ? " ok " : "FAIL")}] {name}: {detail}");
-                if (!ok && !string.IsNullOrEmpty(fixHint)) Console.WriteLine($"         fix: {fixHint}");
+                if (!ok && !string.IsNullOrEmpty(fixHint))
+                    Console.WriteLine($"         {(zh ? "修法" : "fix")}: {fixHint}");
             }
 
-            // 1) TIA installation
             var detected = TiaMcpServer.Siemens.Engineering.DetectTiaMajorVersion();
-            Line(detected != null, "TIA Portal installation",
-                detected != null ? $"detected V{detected}" : "no TIA Portal detected (registry / TiaPortalLocation)",
-                "Install TIA Portal V18+ with the Openness option, or set the TiaPortalLocation environment variable to the install folder (e.g. C:\\Program Files\\Siemens\\Automation\\Portal V21).");
-            ready &= detected != null;
-
-            // 2) engine exe matches the installed version (or a sibling exe can take over)
             int compiled = TiaMcpServer.Siemens.EngineRouter.CompiledTiaMajorVersion;
-            bool verOk = detected == null || detected.Value == compiled
-                || TiaMcpServer.Siemens.EngineRouter.FindSiblingExe(detected.Value) != null;
-            Line(verOk, "Engine exe / TIA version",
-                $"exe built for V{compiled}" + (detected != null ? $", machine has V{detected}" : ", machine version unknown"),
-                detected != null ? $"use the V{detected} exe from the bundle (it ships both), or keep this one and pass --tia-major-version {compiled}." : null);
-            ready &= verOk;
 
-            // 3) Openness user group
+            foreach (var c in Runtime.EnvironmentDoctor.Run(compiled, detected))
+            {
+                Line(c.Ok, c.Name(zh), c.Detail(zh), c.Fix(zh));
+                if (c.Gating) ready &= c.Ok;
+            }
+
+            // Openness group is the one check that can also repair itself, so it stays here rather
+            // than in the shared read-only set.
             bool groupOk; string groupDetail;
             try
             {
                 groupOk = fix
                     ? TiaMcpServer.Siemens.Openness.IsUserInGroup().GetAwaiter().GetResult()
                     : TiaMcpServer.Siemens.Openness.IsUserInGroupNoFix();
-                groupDetail = groupOk ? "current user is in 'Siemens TIA Openness'" : "current user NOT in 'Siemens TIA Openness'";
+                groupDetail = groupOk
+                    ? (zh ? "当前用户已在 'Siemens TIA Openness' 组" : "current user is in 'Siemens TIA Openness'")
+                    : (zh ? "当前用户不在 'Siemens TIA Openness' 组" : "current user NOT in 'Siemens TIA Openness'");
             }
             catch (Exception ex)
             {
                 groupOk = false;
-                groupDetail = "check failed: " + ex.Message;
+                groupDetail = (zh ? "检查失败：" : "check failed: ") + ex.Message;
             }
-            Line(groupOk, "Openness user group", groupDetail,
-                "run `tia doctor --fix` (prompts UAC), or add your Windows user to the local group 'Siemens TIA Openness' (lusrmgr.msc) and sign out/in.");
+            Line(groupOk, zh ? "Openness 用户组" : "Openness user group", groupDetail,
+                zh ? "运行 `tia doctor --fix`（会弹 UAC），或用 lusrmgr.msc 把当前 Windows 用户加入本地组 'Siemens TIA Openness'，然后注销重登。"
+                   : "run `tia doctor --fix` (prompts UAC), or add your Windows user to the local group 'Siemens TIA Openness' (lusrmgr.msc) and sign out/in.");
             ready &= groupOk;
 
-            // 4) AI host configs (informational — does not gate readiness)
+            // AI host configs (informational — does not gate readiness)
             foreach (var h in McpConfigInstaller.KnownHosts())
             {
-                bool present = false;
-                try { present = File.Exists(h.ConfigPath) && File.ReadAllText(h.ConfigPath).Contains("\"" + McpConfigInstaller.ServerKey + "\""); }
-                catch { }
-                Console.WriteLine($"  [{(present ? " ok " : " -- ")}] AI host config — {h.Name}: {(present ? "tia-portal registered" : "not registered")}");
+                // "Registered" is not "working": a config copied from another machine, or one
+                // written before the bundle moved, still holds the entry while pointing at an exe
+                // that is gone — the host then silently fails to start the server.
+                string? cmd = McpConfigInstaller.RegisteredCommand(h);
+                bool present = cmd != null;
+                bool exeOk = present && File.Exists(cmd!);
+                string mark = !present ? " -- " : (exeOk ? " ok " : "FAIL");
+                string state = !present
+                    ? (zh ? "未注册" : "not registered")
+                    : exeOk
+                        ? (zh ? "已注册 tia-portal" : "tia-portal registered")
+                        : (zh ? "已注册，但指向的引擎不存在：" + cmd : "registered, but the engine it points at is missing: " + cmd);
+                Console.WriteLine($"  [{mark}] {(zh ? "AI 客户端配置" : "AI host config")} — {h.Name}: {state}");
+                if (present && !exeOk)
+                    Console.WriteLine("         " + (zh
+                        ? $"修法: 运行 `tia config --host {h.Name.Split(' ')[0].ToLowerInvariant()}` 重新指向本交付包的引擎。"
+                        : $"fix: run `tia config --host {h.Name.Split(' ')[0].ToLowerInvariant()}` to repoint it at this bundle's engine."));
             }
-            Console.WriteLine("         (register into all detected hosts with: tia config)");
+            Console.WriteLine(zh
+                ? "         （一次性写入所有检测到的客户端：tia config）"
+                : "         (register into all detected hosts with: tia config)");
 
             Console.WriteLine(ready
-                ? "READY — environment OK. Next: restart your AI client and ask it to call Bootstrap."
-                : "NOT READY — fix the FAIL items above, then run `tia doctor` again.");
+                ? (zh ? "READY —— 环境正常。下一步：重启 AI 客户端，让它调用 Bootstrap。"
+                      : "READY — environment OK. Next: restart your AI client and ask it to call Bootstrap.")
+                : (zh ? "NOT READY —— 请按上面的『修法』处理 FAIL 项，然后重新运行 tia doctor。"
+                      : "NOT READY — fix the FAIL items above, then run `tia doctor` again."));
             return ready ? 0 : 1;
         }
 
@@ -346,7 +371,7 @@ USAGE
   tia export   <project.apXX> --plc NAME --out DIR --block PATH [--scl]
   tia import   <project.apXX> --plc NAME --from DIR [--no-overwrite]
   tia prewarm  [--stop]                                   Hold a headless instance open (~1s attach after)
-  tia config   [--host claude|claude-code|cursor|vscode] [--print] [--full]
+  tia config   [--host claude|claude-code|cursor|vscode|codex|gemini|windsurf|cline] [--print] [--full]
                                                           One-click: register this MCP into all detected AI hosts
                                                           (Claude Desktop / Claude Code / Cursor / VS Code); auto-picks
                                                           the exe matching your installed TIA version.

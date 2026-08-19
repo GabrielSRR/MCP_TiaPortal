@@ -112,6 +112,9 @@ Block skeleton — LAD FCs return Void:
       END_NETWORK
   END_FUNCTION
 - Contacts: Contact( op ) = NO; I_Contact( op ) = NC (inverted); Not() = invert power flow. Edge: P_Trig( ""edgeMem"" ) / N_Trig( ... ).
+- EVERY network needs its own { S7_Language := ""LAD"" } pragma immediately before NETWORK. Without it the import fails with `Syntax error 'NETWORK' expecting END_FUNCTION_BLOCK`. (Checked against 10147 networks in real exported blocks: the pragma is present on every single one.)
+- Edge elements come in two shapes and are NOT interchangeable: P_Trig( mem ) / N_Trig( mem ) take ONE operand (the edge memory bit) and act on power flow, while P_Contact( signal, mem ) / N_Contact( signal, mem ) take TWO (the signal plus its own memory bit). Passing one argument to P_Contact fails to import.
+- Generic instructions need a { S7_Templates := ""..."" } pragma, and the template NAME differs per instruction — real exports use SrcType (compare/math), DestType (Convert), time_type (IEC timers), date_type, str_type. When it is wrong the error lists what is allowed (""Allowed Template Names: ...""); read that list rather than guessing.
 - Coils: Coil( op ); S_Coil( op ) set; R_Coil( op ) reset.
 - Compare box: prefix { S7_Templates := ""SrcType := Int"" } then GT_Contact( in1 := , in2 := )  (also LT_/EQ_/NE_/LE_Contact).
 - Math/move box (with SrcType template): Move( in := , out1 => );  Sub( in1 := , in2 := , out => )  (Add/Mul/Div/Neg alike).

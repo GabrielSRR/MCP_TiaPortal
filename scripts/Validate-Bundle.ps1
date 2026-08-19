@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Offline validation: required files, JSON parse, blueprint bundle list, tool roster count.
@@ -46,6 +46,30 @@ $exeCandidates = @(
 )
 $exe = $exeCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $exe) { Fail "Missing server exe (checked: $($exeCandidates -join ' ; '))" } else { Ok "TiaMcpServer.exe present ($exe)" }
+
+# Sentinel: every launcher must point at an engine that actually exists in this checkout.
+# The .cmd/.bat files and this script drifted apart once already — the validator checked one
+# path while every user ran another — so the launchers are now parsed and verified here.
+$launchers = @('tia.cmd','tia-v20.cmd','配置MCP.bat','配置MCP-v20.bat',
+               'scripts\预热.bat','scripts\生成工程.bat')
+foreach ($rel in $launchers) {
+    $lp = Join-Path $root $rel
+    if (-not (Test-Path -LiteralPath $lp)) { Fail ("Missing launcher: " + $rel); continue }
+    $ldir = Split-Path -Parent $lp
+    $text = Get-Content -LiteralPath $lp -Raw -Encoding UTF8
+    $refs = @([regex]::Matches($text, '%~dp0([^"%]*TiaMcpServer\.exe)') |
+              ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+    if ($refs.Count -eq 0) { Fail ($rel + ': references no TiaMcpServer.exe path'); continue }
+    $anyPresent = $false
+    foreach ($r in $refs) { if (Test-Path -LiteralPath (Join-Path $ldir $r)) { $anyPresent = $true } }
+    if ($anyPresent) { Ok ($rel + ' -> an engine present in this checkout') }
+    elseif ($rel -match 'v20') {
+        # A git clone ships the V21 runtime only; the V20 launchers say so themselves and point
+        # at the release zip, so a missing V20 engine here is expected, not a defect.
+        Write-Host ("[WARN] " + $rel + ": no V20 engine in this checkout (expected for a git clone; the launcher tells the user to fetch the release zip)") -ForegroundColor Yellow
+    }
+    else { Fail ($rel + ' points at no engine present here: ' + ($refs -join ' ; ')) }
+}
 
 $readme = Join-Path $root "README.md"
 if (-not (Test-Path -LiteralPath $readme)) { Fail "Missing README.md" } else { Ok "README.md present" }

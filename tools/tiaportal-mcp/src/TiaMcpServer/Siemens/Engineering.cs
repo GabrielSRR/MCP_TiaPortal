@@ -130,6 +130,53 @@ namespace TiaMcpServer.Siemens
             return candidates.Count > 0 ? candidates.Max() : (int?)null;
         }
 
+        /// <summary>
+        /// Answer "will Resolver() actually find Siemens.Engineering at load time?" by walking the
+        /// exact same install path and search directories it does. A check that only asks the
+        /// registry whether TIA is installed says OK on a machine where Openness was never
+        /// installed — and the engine then dies with FileLoadException / "Could not find
+        /// installation path" on the first real call. Reuses the resolver's own private helpers so
+        /// the two cannot drift apart.
+        /// </summary>
+        public static (bool Ok, string? InstallPath, string? ResolvedDll, string? Problem) ProbeOpennessAssemblies()
+        {
+            string? installPath;
+            try { installPath = GetTiaPortalInstallPath(); }
+            catch (Exception ex) { return (false, null, null, "install path lookup threw: " + ex.Message); }
+
+            if (string.IsNullOrEmpty(installPath))
+            {
+                return (false, null, null,
+                    $"no TIA Portal V{TiaMajorVersion} install path (registry TIAP{TiaMajorVersion}\\TIA_Opns, " +
+                    "TiaPortalLocation env var and the default install folder were all checked)");
+            }
+
+            var versionString = TiaMajorVersion.ToString();
+            var searchDirectories = new[]
+            {
+                Path.Combine(installPath, "PublicAPI", $"V{versionString}"),
+                Path.Combine(installPath, "Bin", "PublicAPI")
+            };
+            var excluded = new[] { "V13", "V14", "V15", "V16", "V17", "V18", "V19", "V20" }
+                .Where(v => v != $"V{versionString}");
+
+            // V20 ships the monolithic Siemens.Engineering.dll; V21 splits it into
+            // Siemens.Engineering.Base/Step7/... — either one proves Openness is present.
+            foreach (var dll in new[] { "Siemens.Engineering.dll", "Siemens.Engineering.Base.dll" })
+            {
+                foreach (var dir in searchDirectories)
+                {
+                    string? found;
+                    try { found = FindAssemblyRecursive(dir, dll, excluded); }
+                    catch { continue; }
+                    if (found != null) return (true, installPath, found, null);
+                }
+            }
+
+            return (false, installPath, null,
+                $"found the TIA folder but no Siemens.Engineering(.Base).dll under {string.Join(" or ", searchDirectories)}");
+        }
+
         private static string? GetTiaPortalInstallPath()
         {
             // 1. Explicit CLI override (--tia-portal-location). Highest priority — needed when TIA

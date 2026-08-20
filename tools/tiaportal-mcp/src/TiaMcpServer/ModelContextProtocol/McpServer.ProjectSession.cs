@@ -68,15 +68,26 @@ namespace TiaMcpServer.ModelContextProtocol
 
         [McpServerTool(Name = "OpenProject"), Description("[L1][Project] Open a local TIA Portal project (.apXX) or multi-user session (.alsXX) file, where XX is the TIA version number (e.g. .ap21, .als21). Requires: Connect. Closes any currently open project first. After success, call GetProjectTree to explore its structure.")]
         public static ResponseOpenProject OpenProject(
-            [Description("path: defines the path where to the project/session")] string path)
+            [Description("path: defines the path where to the project/session")] string path,
+            [Description("closeForeignProject: DEFAULT false. If TIA already has a project open that this session did not open, the call is REFUSED rather than closing the user's work. Only pass true after the user has agreed to close it.")] bool closeForeignProject = false)
         {
             try
             {
+                var foreign = Portal.ForeignOpenProjectName();
+                if (foreign != null && !closeForeignProject)
+                    throw new McpException(
+                        "OpenProject refused: TIA Portal already has the project '" + foreign + "' open and this " +
+                        "session did not open it - it belongs to the user. OpenProject closes the current project " +
+                        "first, which would discard any unsaved edits. To work on that project call " +
+                        "AttachToOpenProject(projectName=\"" + foreign + "\"). To close it anyway pass " +
+                        "closeForeignProject=true - ask the user before you do.",
+                        McpErrorCode.InvalidRequest);
+
                 if (Portal.ProjectIsValid)
                 {
                     Portal.CloseProject();
-                }
-
+                }
+
                 // get project extension
                 string extension = Path.GetExtension(path).ToLowerInvariant();
 
@@ -91,7 +102,7 @@ namespace TiaMcpServer.ModelContextProtocol
 
                 if (extension.StartsWith(".ap"))
                 {
-                    success = Portal.OpenProject(path);
+                    success = Portal.OpenProject(path, closeForeignProject);
                 }
                 if (extension.StartsWith(".als"))
                 {
@@ -153,15 +164,26 @@ namespace TiaMcpServer.ModelContextProtocol
         [McpServerTool(Name = "CreateProject"), Description("[L1][Project] Create a new empty TIA Portal project. Requires: Connect. After creation, call AddDevice to add PLCs/HMIs, then GetProjectTree to verify. The project is automatically opened after creation — no separate OpenProject call needed.")]
         public static ResponseMessage CreateProject(
             [Description("directoryPath: folder where project will be created")] string directoryPath,
-            [Description("projectName: project name")] string projectName)
+            [Description("projectName: project name")] string projectName,
+            [Description("closeForeignProject: DEFAULT false. If TIA already has a project open that this session did not open, the call is REFUSED rather than closing the user's work. Only pass true after the user has agreed to close it.")] bool closeForeignProject = false)
         {
             try
             {
+                var foreign = Portal.ForeignOpenProjectName();
+                if (foreign != null && !closeForeignProject)
+                    throw new McpException(
+                        "CreateProject refused: TIA Portal already has the project '" + foreign + "' open and this " +
+                        "session did not open it - it belongs to the user. CreateProject closes the current project " +
+                        "first, which would discard any unsaved edits. To work on that project call " +
+                        "AttachToOpenProject(projectName=\"" + foreign + "\"). To close it anyway pass " +
+                        "closeForeignProject=true - ask the user before you do.",
+                        McpErrorCode.InvalidRequest);
+
                 if (Portal.ProjectIsValid)
                 {
                     Portal.CloseProject();
-                }
-                var ok = Portal.CreateProject(directoryPath, projectName);
+                }
+                var ok = Portal.CreateProject(directoryPath, projectName, closeForeignProject);
                 if (!ok)
                     throw new McpException($"Failed to create project '{projectName}' in '{directoryPath}'", McpErrorCode.InternalError);
 

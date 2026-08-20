@@ -44,6 +44,13 @@ namespace TiaMcpServer.Siemens
         private TiaPortal? _portal;
         private ProjectBase? _project;
 
+        /// <summary>
+        /// The currently open project/session, or null. Exposed because some Openness features are
+        /// only reachable as a service off the project root (e.g. VersionControlInterface) and the
+        /// generic reflection helpers navigate properties, not services.
+        /// </summary>
+        public ProjectBase? CurrentProject => _project;
+
         // Did THIS session open the current project, or did we attach to one the user already had
         // open? ConnectPortal deliberately prefers a running Portal that already HAS a project --
         // right for AttachToOpenProject, catastrophic for CreateProject/OpenProject, whose first act

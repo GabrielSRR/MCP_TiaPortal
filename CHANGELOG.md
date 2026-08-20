@@ -1,5 +1,69 @@
 # Change Log
 
+## [2.5.0] - 2026-08-20 - 把博途工程放进 Git：版本控制接口（VCI）全流程
+
+**这版的主角**：TIA V21 的版本控制接口（Version Control Interface）。博途工程是二进制的，
+Git 没法 diff；VCI 把工程映射成一个普通文件夹、每个对象一份文本文件，于是"改了哪个块、改了哪一行"
+第一次变得可 diff、可 review、可回滚。本版把整圈做成命令，**不需要在博途界面里点任何东西**。
+
+### 怎么用（三步）
+
+```
+1) CreateVersionControlWorkspace(workspaceName="git", folderPath="D:\repos\my-plc")
+2) ConnectProjectToWorkspace(dryRun=false)      ← 整工程自动纳管，几百个块一条命令
+3) SyncVersionControlWorkspace(direction="ProjectToWorkspace", dryRun=false)
+   然后：git add -A && git commit
+```
+
+之后每次想知道改了什么：`GetVersionControlStatus(changedOnly=true)` —— 精确到块，
+这就是 change log 的输入。完整指南见 **`docs/version-control-git.md`**。
+
+### 新增
+
+- **`ConnectProjectToWorkspace`（新工具，工具数 218 → 219）**：递归遍历工程树，逐对象询问
+  `GetSupportedFileFormats`，支持的就纳管。**粗粒度优先**（能整体纳管就不往下拆），
+  不支持的对象**逐条报出**而非静默丢弃。默认 `dryRun=true`。
+- **`tools/vci-watch/`**：约 300 行的看门狗，程序一改一编译就自动导出、写 CHANGELOG、`git commit`。
+  只用免费档工具；只读附着、绝不打开工程、绝不写工程、绝不替你编译；无变更时完全静默不产生空提交。
+
+### 分层调整：按“方向”分，不按“工具”分
+
+免费档现在覆盖**完整闭环**——`CreateVersionControlWorkspace`、`ConnectProjectToWorkspace`、
+`GetVersionControlWorkspaces`、`GetVersionControlStatus`，以及
+`SyncVersionControlWorkspace(direction='ProjectToWorkspace')`（导出）。
+这些**只读工程、只写文本**。唯一需要 Pro 的是 `direction='WorkspaceToProject'`
+（把 Git 里的版本灌回工程，**会覆盖工程里的块**）。
+
+此前 Create/Connect/Sync 全在 Pro 侧，免费用户能查出"哪些块变了"却建不了工作区、导不出文本 —— 用不起来。
+
+### 修复
+
+- **`GetVersionControlStatus` 返回的是类型名而不是状态**：`MappedObject.GetStatus()` 返回
+  `IndividualObjectCompareResult`，直接 `ToString()` 得到类名。改取 `.CompareState`
+  （`Equal` / `Unequal` / `WorkspaceFileMissing` / `Unknown`）。此前整列状态都是无意义字符串。
+- **同步会对已一致的对象报错**：Openness 拒绝对状态为 `Equal` 的映射调用 `Synchronize`
+  （`Synchronize cannot be called on a workspace mapping that has a compare status of equal`），
+  在一个 345 对象的工程上会一次报出 345 条失败。现在 `Equal` 一律跳过，并在汇总里报出跳过数。
+- **代理对象生命周期硬化**：Openness 的调用**一抛异常就会 dispose 掉相关对象**——问一次
+  "工程支不支持纳管"得到"不支持"，`Workspace` 句柄当场作废，后续全报
+  `Access to a disposed object`（看着像博途崩了，其实没有）。扫描逻辑现在每次失败后重取句柄。
+  另外，通用反射桥 `GetComposition` 返回的是**临时代理，拿到即死**，遍历改为类型化。
+
+### 已知边界（工具会明说，不会假装成功）
+
+- **硬件组态进不了 VCI**（设备/模块/子网一律"不支持"），仍需 `.ap21` 备份或 CAx 导出。
+- **专有技术保护的块导不出**：`The block is know-how protected. Export is not possible.`
+- **块改动后必须编译才导得出**：`The block is inconsistent. Compile the block prior to export.`
+  检测不受影响（未存盘也能检测到），只是导出要等编译。
+- **`Unequal` 不等于内容变了**：`git checkout`/`pull` 把文件原样重写（时间戳变）同样判 `Unequal`，
+  自动化脚本提交前应再看一眼 `git status` 有没有真差异。
+
+### 验证
+
+真实起重机项目（5 台 PLC、159 MB 工程）：**345 个对象自动纳管**（约 165 秒），
+文本仓 345 个 `.xml` / 22 MB；在博途界面里改块并编译 → 看门狗自动导出并提交，diff 就是那处改动；
+反向（从 Git 版本还原回工程）→ 编译 0 错 0 警告。MCP 回归 **287/287**，V20/V21 双编译 0 错 0 警告。
+
 ## [2.4.1] - 2026-08-20 - 安全修复：不再默默关掉用户打开的工程
 
 **建议所有 v2.4.0 及更早版本用户升级。** 这是一个会真实丢数据的缺陷。

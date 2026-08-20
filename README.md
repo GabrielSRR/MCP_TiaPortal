@@ -13,6 +13,34 @@
 在 **Windows + TIA Portal V20 或 V21** 下，通过 **MCP（stdio 或 HTTP）** 驱动博途：建项目、加硬件、生成 PLC（Tag/UDT/DB/SCL/LAD）、生成 **WinCC Unified** 画面与事件、编译诊断、保存。  
 包内含 **已编译运行时**、Skill、静态工具清单、能力矩阵、PLC/HMI 模板、**一键可读的项目蓝图**与手册。**不要求**另行克隆源码仓库。
 
+
+## 🆕 v2.5.0：把博途工程放进 Git（版本控制接口 VCI）
+
+博途工程是二进制的，Git 没法 diff —— 于是"版本管理"长期只能靠另存一堆日期文件夹。
+V21 的**版本控制接口**把工程映射成一个普通文件夹，**每个块一份文本文件**，可 diff、可 commit、可 review。
+本版把整圈做成了几条命令，**全程不用在博途界面里点任何东西**。
+
+对 AI 说一句就够了：
+
+```
+把当前工程放进 Git，工作区用 D:\repos\my-plc
+```
+
+它会建工作区 → **整工程自动纳管**（几百个块一条命令，不用手工勾选）→ 导出文本，
+然后你 `git commit` 即可。之后想知道改了什么：
+
+```
+GetVersionControlStatus(changedOnly=true)
+→ A3_4_Hoist | Unequal        ← 精确到块
+```
+
+- **覆盖**：FC / FB / OB / DB、PLC 变量表、UDT（整个程序侧）。硬件组态和专有技术保护块不在 VCI 覆盖范围内，工具会明确报出来而不是静默跳过。
+- **改完要编译才导得出**（博途的限制）；检测不受影响，未存盘也能检测到。
+- 配套 `tools/vci-watch/`：**改完编译后自动导出 + 写 CHANGELOG + git commit**，工程师什么都不用做。
+
+📖 完整用法与三个必知行为 → **[docs/version-control-git.md](docs/version-control-git.md)**
+
+
 ## ⚡ 最快上手（3 步，零编程·CLI 路线）
 
 > 第一次用？**不需要 MCP 客户端、不需要写代码。** 装好 TIA 后照这 3 步，几分钟内生成第一个工程。

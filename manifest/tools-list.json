@@ -1,8 +1,8 @@
 {
   "package": "TIA_MCP_Delivery_v2.4.0",
-  "generatedAt": "2026-08-20T09:46:57.029007+08:00",
+  "generatedAt": "2026-08-20T20:01:39.586911+08:00",
   "source": "live MCP tools/list of TiaMcpServer.exe",
-  "toolCount": 203,
+  "toolCount": 208,
   "note": "Full roster (--profile full). The default lite profile lists ~49 of these; the rest stay reachable via FindTools + CallTool. Runtime tools/list remains authoritative.",
   "tools": [
     {
@@ -520,6 +520,21 @@
       "description": "[L1][Hardware] PREFERRED for PROFINET network setup. Finds the first IE/PROFINET node under two devices, creates/reuses a subnet on the first, connects the second, and returns readback evidence. Requires: Connect + OpenProject + both devices added. Typical: firstRootPath='PLC_1', secondRootPath='HMI_KTP700_1/HMI_KTP700_1.IE_CP_1'. Verified for S7-1200 + KTP700 Basic PN."
     },
     {
+      "name": "ConnectProjectToWorkspace",
+      "layer": "L2",
+      "domain": "VersionControl",
+      "method": "ConnectProjectToWorkspace",
+      "returnType": "",
+      "parameters": [
+        "workspaceName",
+        "dryRun",
+        "deviceFilter",
+        "maxObjects",
+        "walkTrace"
+      ],
+      "description": "[L2][VersionControl] Put a WHOLE project under version control automatically - no TIA UI clicks. Walks the project tree, asks every object whether VCI can map it (Workspace.GetSupportedFileFormats) and maps each supported object with Workspace.ConnectObject. COARSE-FIRST: when a device or PLC software object is mappable as one unit it is mapped whole and its children are not visited, so you get the fewest mappings that still cover everything. Objects VCI does not support (typically hardware configuration) are reported, never silently dropped. DEFAULTS TO dryRun=true: the default call only reports what it WOULD map. After a real run call SyncVersionControlWorkspace(ProjectToWorkspace, dryRun=false), then git commit."
+    },
+    {
       "name": "CreatePlcBlockGroup",
       "layer": "L2",
       "domain": "PLC-Software",
@@ -539,9 +554,22 @@
       "returnType": "",
       "parameters": [
         "directoryPath",
-        "projectName"
+        "projectName",
+        "closeForeignProject"
       ],
       "description": "[L1][Project] Create a new empty TIA Portal project. Requires: Connect. After creation, call AddDevice to add PLCs/HMIs, then GetProjectTree to verify. The project is automatically opened after creation — no separate OpenProject call needed."
+    },
+    {
+      "name": "CreateVersionControlWorkspace",
+      "layer": "L2",
+      "domain": "VersionControl",
+      "method": "CreateVersionControlWorkspace",
+      "returnType": "",
+      "parameters": [
+        "workspaceName",
+        "folderPath"
+      ],
+      "description": "[L2][VersionControl] Create a VCI workspace pointing at a folder on disk — normally the working tree of a Git repository, so every synchronized export lands where Git can commit it. Creating the workspace does NOT map any objects into it — call ConnectProjectToWorkspace afterwards to map the whole project (or one device) automatically. Requires TIA V21+ and an open project."
     },
     {
       "name": "DeletePlcExternalSource",
@@ -1604,6 +1632,27 @@
       "description": "[L2][PLC-Software]Get a list of types from the plc software"
     },
     {
+      "name": "GetVersionControlStatus",
+      "layer": "L1",
+      "domain": "VersionControl",
+      "method": "GetVersionControlStatus",
+      "returnType": "",
+      "parameters": [
+        "workspaceName",
+        "changedOnly"
+      ],
+      "description": "[L1][VersionControl] Per-object status of a VCI workspace: which mapped objects differ between the TIA project and the text files on disk. This is the input for a change log — it names exactly what changed before you commit. Read-only, changes nothing. Status values: Equal (in sync), Unequal (project and file differ), WorkspaceFileMissing (never exported), Unknown."
+    },
+    {
+      "name": "GetVersionControlWorkspaces",
+      "layer": "L1",
+      "domain": "VersionControl",
+      "method": "GetVersionControlWorkspaces",
+      "returnType": "",
+      "parameters": [],
+      "description": "[L1][VersionControl] List this project's version control (VCI) workspaces: name, folder on disk, language, and how many objects are mapped. A workspace is the plain-text mirror of the project that Git can actually diff and commit. Read-only. Requires TIA V21+ and an open project."
+    },
+    {
       "name": "GoOffline",
       "layer": "L1",
       "domain": "PLC-Online",
@@ -2024,7 +2073,8 @@
       "method": "OpenProject",
       "returnType": "",
       "parameters": [
-        "path"
+        "path",
+        "closeForeignProject"
       ],
       "description": "[L1][Project] Open a local TIA Portal project (.apXX) or multi-user session (.alsXX) file, where XX is the TIA version number (e.g. .ap21, .als21). Requires: Connect. Closes any currently open project first. After success, call GetProjectTree to explore its structure."
     },
@@ -2490,6 +2540,20 @@
         "trigger"
       ],
       "description": "[L2][Category:PLC-Online][ONLINE-WRITE][PreCondition:Connect+OpenProject+GoOnline] Configure a watch table entry to write a value to a PLC variable once (or on a trigger). This is an OFFLINE CONFIGURATION step — the value is written to the PLC only when TIA Portal is online and the trigger fires. Trigger options: Permanent (every cycle), PermanentAtStart (every cycle, at scan start), OnceOnlyAtStart (single write at scan start), PermanentAtEnd, OnceOnlyAtEnd, OnceOnlyAtStop. Use GoOnline before calling this for the write to reach the PLC. Does NOT use Force — variable reverts to PLC logic after the modify. To hold a value persistently, use SetForceTableEntry instead. Example: SetWatchTableModifyValue('PLC_1', 'Debug_WT', 'DB1.DBX0.0', 'TRUE', 'OnceOnlyAtStart')"
+    },
+    {
+      "name": "SyncVersionControlWorkspace",
+      "layer": "L1",
+      "domain": "VersionControl",
+      "method": "SyncVersionControlWorkspace",
+      "returnType": "",
+      "parameters": [
+        "direction",
+        "workspaceName",
+        "dryRun",
+        "changedOnly"
+      ],
+      "description": "[L1][VersionControl] Synchronize a VCI workspace. direction='ProjectToWorkspace' writes the TIA project's objects out as text files (do this before `git commit`); 'WorkspaceToProject' reads the text files back INTO the project (do this after `git pull` / to restore a reviewed version). DEFAULTS TO dryRun=true: the default call only reports what WOULD be synchronized. WorkspaceToProject OVERWRITES blocks in the open project — compile and save afterwards, and it requires a Pro license (exporting is free)."
     },
     {
       "name": "TraceTagCause",

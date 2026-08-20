@@ -43,6 +43,16 @@ namespace TiaMcpServer.Siemens
 
         private TiaPortal? _portal;
         private ProjectBase? _project;
+
+        // Did THIS session open the current project, or did we attach to one the user already had
+        // open? ConnectPortal deliberately prefers a running Portal that already HAS a project --
+        // right for AttachToOpenProject, catastrophic for CreateProject/OpenProject, whose first act
+        // is to Close() whatever is open. Without this flag those two silently close the engineer's
+        // work, unsaved edits included. Set true only where we ourselves opened/created it.
+        private bool _projectOpenedByUs;
+
+        /// <summary>True when the open project is one the user already had open (we merely attached).</summary>
+        public bool HasForeignProject => _project != null && !_projectOpenedByUs;
         private LocalSession? _session;
         // Resolving a softwarePath walks the device tree via Openness (~40 COM calls per call). Cache it per
         // open project; ReferenceEquals(_project) auto-invalidates on any project open/close/create/attach
@@ -179,6 +189,7 @@ namespace TiaMcpServer.Siemens
             {
                 LastConnectError = null;
                 _project = null;
+                _projectOpenedByUs = false;
                 _session = null;
                 _portal = null;
 
@@ -235,6 +246,7 @@ namespace TiaMcpServer.Siemens
                                     {
                                         _session = _portal.LocalSessions.First();
                                         _project = _session.Project;
+                                        _projectOpenedByUs = false;
                                     }
                                     catch { }
                                 }
@@ -242,6 +254,7 @@ namespace TiaMcpServer.Siemens
                                 if (_project == null && hasProject)
                                 {
                                     try { _project = _portal.Projects.First(); } catch { }
+                                    _projectOpenedByUs = false;
                                 }
 
                                 return true;
@@ -378,6 +391,7 @@ namespace TiaMcpServer.Siemens
             return Operation.Run(_logger, nameof(DisconnectPortal), () =>
             {
                 _project = null;
+                _projectOpenedByUs = false;
                 _session = null;
                 _portal?.Dispose();
                 _portal = null;
@@ -560,9 +574,34 @@ namespace TiaMcpServer.Siemens
             return projects;
         }
 
-        public bool OpenProject(string projectPath)
+        /// <summary>The refusal text. Written for the model: what happened, why, and the two ways out.</summary>
+        private static string ForeignProjectRefusal(string projectName, string verb)
+        {
+            return verb + " refused: TIA Portal already has the project '" + projectName + "' open, and this " +
+                   "session did not open it - it is the user's. " + verb + " closes the current project first, " +
+                   "which would discard any unsaved edits. " +
+                   "If you meant to work on that project, call AttachToOpenProject(projectName=\"" + projectName + "\"). " +
+                   "If you really do want it closed, pass closeForeignProject=true (ask the user first).";
+        }
+
+        /// <summary>Name of the user's own open project when closing it would be collateral damage, else null.</summary>
+        public string? ForeignOpenProjectName()
+        {
+            if (!HasForeignProject) return null;
+            try { return _project?.Name ?? "(unnamed)"; }
+            catch { return "(unnamed)"; }
+        }
+
+        public bool OpenProject(string projectPath, bool closeForeignProject = false)
         {
             _logger?.LogInformation($"Opening project: {projectPath}");
+
+            var foreign = ForeignOpenProjectName();
+            if (foreign != null && !closeForeignProject)
+            {
+                LastConnectError = ForeignProjectRefusal(foreign, "OpenProject");
+                return false;
+            }
 
             if (IsPortalNull())
             {
@@ -579,6 +618,7 @@ namespace TiaMcpServer.Siemens
             {
                 (_project as Project)?.Close();
                 _project = null;
+                _projectOpenedByUs = false;
             }
 
             if (_session != null)
@@ -619,11 +659,13 @@ namespace TiaMcpServer.Siemens
                     try
                     {
                         _project = _portal?.Projects.OpenWithUpgrade(fi);
+                        _projectOpenedByUs = true;
                     }
                     catch (Exception ex)
                     {
                         LastConnectError = $"OpenWithUpgrade failed: {ex}";
                         _project = null;
+                        _projectOpenedByUs = false;
                     }
 
                     if (_project != null) return true;
@@ -671,8 +713,14 @@ namespace TiaMcpServer.Siemens
             }
         }
 
-        public bool CreateProject(string directoryPath, string projectName)
+        public bool CreateProject(string directoryPath, string projectName, bool closeForeignProject = false)
         {
+            var foreign = ForeignOpenProjectName();
+            if (foreign != null && !closeForeignProject)
+            {
+                LastConnectError = ForeignProjectRefusal(foreign, "CreateProject");
+                return false;
+            }
             _logger?.LogInformation($"Creating project: dir={directoryPath}, name={projectName}");
 
             if (IsPortalNull())
@@ -686,6 +734,7 @@ namespace TiaMcpServer.Siemens
                 {
                     (_project as Project)?.Close();
                     _project = null;
+                    _projectOpenedByUs = false;
                 }
 
                 if (_session != null)
@@ -699,6 +748,7 @@ namespace TiaMcpServer.Siemens
 
                 var created = _portal!.Projects.Create(di, projectName);
                 _project = created;
+                _projectOpenedByUs = true;
                 return _project != null;
             }
             catch (Exception ex)
@@ -778,6 +828,7 @@ namespace TiaMcpServer.Siemens
 
             (_project as Project)?.Close();
             _project = null;
+            _projectOpenedByUs = false;
 
             return true;
         }
@@ -820,6 +871,7 @@ namespace TiaMcpServer.Siemens
             if (_session != null)
             {
                 _project = null;
+                _projectOpenedByUs = false;
                 _session?.Close();
                 _session = null;
             }
@@ -886,6 +938,7 @@ namespace TiaMcpServer.Siemens
             }
 
             _project = null;
+            _projectOpenedByUs = false;
             _session?.Close();
             _session = null;
 

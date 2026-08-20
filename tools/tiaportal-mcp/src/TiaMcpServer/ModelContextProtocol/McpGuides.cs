@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace TiaMcpServer.ModelContextProtocol
 {
@@ -19,6 +19,8 @@ namespace TiaMcpServer.ModelContextProtocol
 @"TIA Portal MCP server (Siemens PLC/HMI engineering via Openness). How to work well:
 
 FIRST CALL: Bootstrap — returns environment status, connection state, the recommended next tool, and operating rules. Do this before anything else. If the environment itself seems broken (TIA missing, group membership, nothing connects), call Doctor for a plain-language diagnosis with exact fixes.
+
+THE TOOL LIST YOU SEE IS NOT THE WHOLE SERVER. By default only ~48 core tools are listed, out of ~200. The rest — watch tables, alarms, GSD/hardware catalog, OPC UA, technology objects, HMI screens and themes, cross-reference and repair tools, online monitoring — are reached WITHOUT changing anything: call FindTools('what you need in plain words'), then CallTool(name, argumentsJson). So never conclude ""this server cannot do X"" from the visible list; run FindTools('X') first. (An operator who wants everything listed at once can start the server with --profile full, but the tool list then exceeds what VS Code/Copilot and Windsurf accept.)
 
 GOLDEN PATHS (pick one, do not improvise):
 - Whole new project → ScaffoldProject with ONE JSON spec (PLC + blocks + HMI + compile + save in a single call). The DEFAULT call is a dry run (offline spec validation, nothing created); when it reports clean, call again with dryRun=false to actually create.

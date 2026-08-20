@@ -175,23 +175,23 @@ namespace TiaMcpServer.Cli
                 ? v
                 : (TiaMcpServer.Siemens.Engineering.DetectTiaMajorVersion() ?? 21);
             string exe = McpConfigInstaller.ExeForVersion(ver);
-            // Default = lite (~42 essential tools): weaker models are not drowned in ~200
-            // choices and VS Code's 128-tool cap never trips. Pass --full for everything;
-            // --lite is still accepted (now a no-op kept for compatibility).
-            bool lite = !Flag(args, "--full");
+            // The engine itself now defaults to the ~48-tool lite roster, so a plain config is
+            // already the right one and pins no profile. --full is the opt-out; --lite is still
+            // accepted and still yields lite, since lite is the default.
+            bool full = Flag(args, "--full");
 
             if (Flag(args, "--print"))
             {
                 Console.WriteLine("Claude Desktop / Claude Code / Cursor (mcpServers):");
-                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.McpServers, lite));
+                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.McpServers, full));
                 Console.WriteLine();
                 Console.WriteLine("VS Code — %APPDATA%\\Code\\User\\mcp.json (servers):");
-                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.VsCode, lite));
+                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.VsCode, full));
                 Console.WriteLine();
                 Console.WriteLine("Gemini CLI / Windsurf / Cline use the same mcpServers shape as the first snippet.");
                 Console.WriteLine();
                 Console.WriteLine("Codex — %USERPROFILE%\\.codex\\config.toml (TOML):");
-                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.CodexToml, lite));
+                Console.WriteLine(McpConfigInstaller.Snippet(exe, ver, McpConfigInstaller.HostStyle.CodexToml, full));
                 return 0;
             }
 
@@ -212,12 +212,12 @@ namespace TiaMcpServer.Cli
                     continue;
                 }
 
-                try { Console.WriteLine("  [ok]     " + h.Name + ": " + McpConfigInstaller.Apply(h.ConfigPath, exe, ver, h.Style, lite)); done++; }
+                try { Console.WriteLine("  [ok]     " + h.Name + ": " + McpConfigInstaller.Apply(h.ConfigPath, exe, ver, h.Style, full)); done++; }
                 catch (Exception ex) { Console.Error.WriteLine("  [failed] " + h.Name + ": " + ex.Message); failed++; }
             }
 
             Console.WriteLine(done > 0
-                ? $"Configured {done} host(s) for TIA V{ver} -> {exe}{(lite ? " [lite profile: ~42 essential tools — rerun with --full for the whole tool surface]" : " [full profile: all tools]")}. Restart the AI client to load it. (original config backed up as *.bak)"
+                ? $"Configured {done} host(s) for TIA V{ver} -> {exe}{(full ? " [full profile: all tools — exceeds VS Code/Copilot's 128 and Windsurf's 100 tool cap]" : " [default lite profile: ~48 core tools; the rest stay reachable via FindTools/CallTool]")}. Restart the AI client to load it. (original config backed up as *.bak)"
                 : "No host config written. Targeted host not found, or use `config --print` to copy the snippet manually.");
             Console.WriteLine("For other hosts, run `config --print` and paste the matching snippet.");
             return failed > 0 && done == 0 ? 1 : 0;
@@ -375,8 +375,10 @@ USAGE
                                                           One-click: register this MCP into all detected AI hosts
                                                           (Claude Desktop / Claude Code / Cursor / VS Code); auto-picks
                                                           the exe matching your installed TIA version.
-                                                          Default = lite profile (~42 essential tools: safe for weaker
-                                                          models and VS Code's 128-tool cap). --full = all tools.
+                                                          Default lists ~48 core tools; the rest stay reachable
+                                                          on demand via FindTools + CallTool.
+                                                          --full = list every tool instead (rejected by VS Code/
+                                                          Copilot above 128 and Windsurf above 100)
   tia doctor   [--fix]                                    Environment check: TIA install, exe/version match, Openness
                                                           group, AI host configs. --fix auto-adds the Openness group
   tia schema                                              Print the spec field reference

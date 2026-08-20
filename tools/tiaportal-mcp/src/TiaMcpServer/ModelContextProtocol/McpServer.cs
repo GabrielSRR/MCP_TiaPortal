@@ -285,6 +285,19 @@ namespace TiaMcpServer.ModelContextProtocol
                     "HMI screen text labels use itemType 'Text' (HmiText). A Rectangle has NO Text property — writing text onto a Rectangle silently yields a blank label. Use Rectangle only for lamps/indicators/backgrounds.",
                 };
 
+                // The roster is trimmed by default, so say so HERE too. Bootstrap is the one call
+                // every model makes; a model that only reads the tool list would otherwise conclude
+                // the unlisted tools do not exist.
+                {
+                    int total = GetMcpToolNames().Count();
+                    rules = rules.Concat(new[]
+                    {
+                        IsLiteProfile()
+                            ? $"TOOL ROSTER: this session lists ~{LiteToolNames.Count} core tools of {total} total (profile=lite, the default — it keeps the tool list inside what VS Code/Copilot and Windsurf accept and saves ~30k tokens per turn). To use ANY unlisted tool: FindTools('plain words for what you need') → CallTool(name, argumentsJson). Never report a capability as missing without running FindTools first."
+                            : $"TOOL ROSTER: profile=full — all {total} tools are listed. Note that VS Code/Copilot (128) and Windsurf (100) refuse rosters this large; use the default lite profile there.",
+                    }).ToArray();
+                }
+
                 bool ready = env.OpennessGroupOk == true && (env.TiaVersionInUse != null || env.TiaVersionDetected != null);
 
                 return new ResponseBootstrap

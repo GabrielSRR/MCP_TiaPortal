@@ -110,6 +110,10 @@ namespace TiaMcpServer
                 // Headless by default for fast startup; --with-ui launches the full GUI for inspection.
                 // Flag lives on Engineering (Siemens-free) so setting it here doesn't force the CLR to
                 // load the Portal type (its Siemens.Engineering fields) at Main's JIT time.
+                // Tool roster size. --profile wins over TIA_MCP_PROFILE; default is lite.
+                // Must be applied before the MCP host is built, since it decides tools/list.
+                ModelContextProtocol.McpServer.SetProfileOverride(options.Profile);
+
                 Engineering.LaunchWithUserInterface = options.PortalWithUserInterface;
                 LogDiag(options.PortalWithUserInterface
                     ? "TIA Portal will launch WITH user interface (--with-ui); slower cold start."

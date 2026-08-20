@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Assert that TIA_MCP_PROFILE=lite is still a USABLE profile.
+"""Assert that the DEFAULT (lite) profile is a USABLE profile, and that full still differs.
 
-lite is what 配置MCP.bat --lite writes for weak models and tool-capped hosts (VS Code caps at
-128). It is only worth recommending if a model restricted to it can still walk the golden path
-end to end. It could not: ImportFromDocuments / ExportAsDocuments / GetBlocks / GetBlockInfo /
+lite is now the default roster for every host, so a model restricted to it must still be able
+to walk the golden path end to end, and to reach everything outside it. It could not: ImportFromDocuments / ExportAsDocuments / GetBlocks / GetBlockInfo /
 GetCrossReferences were all [L2], so a lite session could open a project and see the tree but
 could neither list a block nor use the PREFERRED document import path. Nothing caught that,
 because nothing checked it. This does.
 
+It also guards the check itself. When lite became the default, "full" was still being requested
+by *unsetting* the env var — so both probes returned the same ~48 tools and every assertion here
+passed vacuously. full must now be requested explicitly AND come back strictly larger.
+
 Usage:  python scripts/Check-LiteProfile.py [path-to-TiaMcpServer.exe]
-Exit 0 = lite is self-sufficient and fits the host cap.
+Exit 0 = lite is self-sufficient, fits the host cap, and can reach everything else.
 """
 import json
 import os
@@ -39,6 +42,8 @@ REQUIRED = [
     "GenerateBlocksFromExternalSource",
     # verify
     "CompileSoftware", "CompileAndDiagnosePlc",
+    # the bridge out of lite — without these two, lite is a dead end for the other ~155 tools
+    "FindTools", "CallTool",
 ]
 
 # VS Code refuses to enable more tools than this; lite exists to stay under it.
@@ -46,12 +51,15 @@ HOST_TOOL_CAP = 128
 
 
 def tools_for_profile(profile):
+    """profile=None means 'whatever a user gets with no flag and no env var'."""
+    # Always pass --profile explicitly when asking for a specific roster. Relying on
+    # "unset the env var" silently stopped meaning "full" the day lite became the default.
     env = dict(os.environ)
+    env.pop("TIA_MCP_PROFILE", None)
+    args = [str(EXE), "--logging", "0"]
     if profile:
-        env["TIA_MCP_PROFILE"] = profile
-    else:
-        env.pop("TIA_MCP_PROFILE", None)
-    p = subprocess.Popen([str(EXE), "--logging", "0"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        args += ["--profile", profile]
+    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                          bufsize=1, env=env)
     seq = [0]
@@ -100,10 +108,12 @@ def main():
         return 1
     print("engine:", EXE)
 
-    full = tools_for_profile(None)
+    full = tools_for_profile("full")
     lite = tools_for_profile("lite")
-    print("full profile: %d tools" % len(full))
-    print("lite profile: %d tools" % len(lite))
+    default = tools_for_profile(None)
+    print("full profile   : %d tools" % len(full))
+    print("lite profile   : %d tools" % len(lite))
+    print("default profile: %d tools" % len(default))
 
     failures = []
     missing = [n for n in REQUIRED if n not in lite]
@@ -121,12 +131,26 @@ def main():
     if not lite:
         failures.append("lite exposed no tools")
 
+    # Sentinel: if these ever come back equal, the two probes are no longer probing two
+    # different rosters and every assertion above is meaningless.
+    if len(full) <= len(lite):
+        failures.append("full (%d) is not larger than lite (%d) — the profile probes are not "
+                        "distinguishing the two rosters, so this check proves nothing"
+                        % (len(full), len(lite)))
+
+    # lite must be what a user gets with no flags and no env var: every generated host
+    # config now relies on that default rather than writing the flag out.
+    if sorted(default) != sorted(lite):
+        failures.append("the default profile (no flag, no env var) is not lite: %d tools vs %d"
+                        % (len(default), len(lite)))
+
     for f in failures:
         print("[FAIL]", f)
     if failures:
         return 1
-    print("[ ok ] lite covers all %d golden-path tools and stays under the %d cap"
-          % (len(REQUIRED), HOST_TOOL_CAP))
+    print("[ ok ] default is lite; lite covers all %d golden-path tools, stays under the %d cap, "
+          "and the other %d tools stay reachable via FindTools/CallTool"
+          % (len(REQUIRED), HOST_TOOL_CAP, len(full) - len(lite)))
     return 0
 
 

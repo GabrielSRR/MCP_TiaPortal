@@ -106,9 +106,12 @@ to run.
    **Claude Desktop / Claude Code / Cursor / VS Code** (existing config backed up
    as `.bak`, other servers preserved). Restart the AI client to load it.
    Options: `config --host vscode` (or `claude|claude-code|cursor`), `config --print`
-   to copy a snippet manually. By default it writes the **lite profile**
-   (`TIA_MCP_PROFILE=lite`, ~42 essential tools) so weaker models are not drowned and
-   VS Code's 128-tool cap never trips; pass `config --full` for the whole tool surface.
+   to copy a snippet manually. The server lists **~48 core tools of 203 by default**
+   (~8,500 instead of ~38,800 tokens of schema per turn) so weaker models are not drowned
+   and VS Code/Copilot's 128-tool cap and Windsurf's 100 never trip. Nothing is lost: the
+   model reaches every other tool on demand with `FindTools("plain words")` +
+   `CallTool(name, argumentsJson)`, and the handshake instructions tell it so. Pass
+   `config --full` to list the whole tool surface instead.
    If anything fails to connect, run `tia.cmd doctor` (v2.2.8): a one-shot environment
    check (TIA install, exe/version match, Openness group, host registration) with the
    exact fix per problem; `--fix` auto-adds the Openness group. Since v2.2.7 the exe also **self-routes**: if it was

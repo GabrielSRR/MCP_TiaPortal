@@ -71,6 +71,24 @@ foreach ($rel in $launchers) {
     else { Fail ($rel + ' points at no engine present here: ' + ($refs -join ' ; ')) }
 }
 
+# The engine ships the trimmed lite roster by default, so it MUST carry the FindTools/CallTool
+# bridge — an engine with the small roster but without the bridge is the one genuinely broken
+# combination: ~155 tools become unreachable with no way to discover them.
+# Binary marker scan on purpose, so the gate never depends on being able to start the engine.
+# Key on 'FindTools': 'CallTool' also occurs inside the MCP SDK ("CallToolRequest") and would
+# pass on an engine that never defined the bridge at all.
+if ($exe) {
+    $bytes = [System.IO.File]::ReadAllBytes($exe)
+    if ([System.Text.Encoding]::ASCII.GetString($bytes).Contains('FindTools') -or
+        [System.Text.Encoding]::Unicode.GetString($bytes).Contains('FindTools')) {
+        Ok 'Engine carries the FindTools/CallTool bridge'
+    }
+    else {
+        Fail ('Engine has NO FindTools bridge - it predates the lite-by-default change and ' +
+              'would hide ~155 tools with no way to reach them. Rebuild it.')
+    }
+}
+
 $readme = Join-Path $root "README.md"
 if (-not (Test-Path -LiteralPath $readme)) { Fail "Missing README.md" } else { Ok "README.md present" }
 

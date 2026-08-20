@@ -1,10 +1,13 @@
-namespace TiaMcpServer
+﻿namespace TiaMcpServer
 {
     public class CliOptions
     {
         public int? TiaMajorVersion { get; set; }
         public string? TiaPortalLocation { get; set; } // explicit install root, e.g. D:\app\TIA20\Portal V20
         public int? Logging { get; set; } // 1=stderr, 2=Debug, 3=EventLog
+        // Tool roster size: "lite" (default, ~48 tools) or "full" (everything).
+        // null = not given on the command line; TIA_MCP_PROFILE then decides.
+        public string? Profile { get; set; }
         public string? Transport { get; set; } // "stdio" (default) or "http"
         public string? HttpPrefix { get; set; } // e.g. "http://127.0.0.1:8765/"
         public string? HttpApiKey { get; set; } // optional X-API-Key header value
@@ -133,6 +136,15 @@ namespace TiaMcpServer
                         if (i + 1 < args.Length)
                         {
                             options.TiaPortalLocation = args[i + 1];
+                            i++;
+                        }
+                        break;
+
+                    case "-profile":
+                    case "--profile":
+                        if (i + 1 < args.Length)
+                        {
+                            options.Profile = args[i + 1];
                             i++;
                         }
                         break;

@@ -1,5 +1,20 @@
 # Change Log
 
+## [2.4.0] - 2026-08-20 - 精简工具档位成为默认 + FindTools/CallTool 按需取用
+
+实测：全量 203 个工具的 `tools/list` 是 **152 KB / 约 38,800 tokens**，宿主每轮对话都要重发给模型；而 VS Code/GitHub Copilot 的 agent 模式超过 **128** 个工具直接拒绝加载，Windsurf 上限 **100**——也就是说旧的默认档在这两个宿主上根本起不来。
+
+- **默认改为精简档**：`tools/list` 只列 48 个核心工具（33 KB / 约 8,500 tokens，**每轮省约 3 万 tokens**）。此前 lite 只在 `config` 写出的配置里通过环境变量选入，服务端自身默认仍是全量；现在服务端默认就是精简档。
+- **新增 `FindTools` + `CallTool`**：精简档不再是死路。模型用大白话搜索（`FindTools("watch table")`）拿到工具名、参数签名和完整说明，再用 `CallTool(name, argumentsJson)` 照常执行——**能力一个不少**，只是不预先塞进上下文。两个桥接工具本身约 700 tokens。
+- **模型不用人教**：握手指令和 `Bootstrap` 的 operatingRules 都会说明「你看到的工具列表不是全部，缺什么先跑 FindTools」，所以任何宿主、任何模型拿到就会用。
+- **档位开关**：新增 `--profile lite|full` 命令行参数，优先级高于 `TIA_MCP_PROFILE`。默认 lite；拼错的值一律退回 lite，不会静默把宿主顶爆。`tia config` 生成的配置默认**不再写死任何档位**（交给引擎默认），`--full` 才写 `TIA_MCP_PROFILE=full`。
+- 错误信息面向「怎么改」：工具名拼错给出候选（含中间打错字的前缀匹配），缺参数直接打印完整签名，`argumentsJson` 非法说明正确形状。
+
+哨兵与回归：
+- `scripts/Check-LiteProfile.py` 修掉一处**空跑通过**——它原先用「不设环境变量」来取全量档，默认改为 lite 后两次探测都返回同样的 48 个工具，所有断言形同虚设。现在两档都显式传 `--profile`，并断言 full 严格大于 lite、默认档等于 lite。已用反例验证该哨兵确实会 FAIL。
+- `scripts/Validate-Bundle.ps1` 新增引擎桥接门禁（二进制标记扫描，不需要启动引擎）。以 `FindTools` 为标记，因为 `CallTool` 在 MCP SDK 内部字符串里也存在，会让没有桥接的引擎误判通过。
+- 新增 `scripts/Generate-ToolsList.py`：从真实 `tools/list`（显式 `--profile full`）重建 `manifest/tools-list.json`，避免清单只记录默认档的四分之一。
+- 全部工具逐个冒烟：无崩溃、无服务端掉线。
 ## [2.3.2] - 2026-08-19 - 装得上·连得通·报得准
 
 本轮全部围绕「新机装完到第一次跑通」这一段，工具能力零新增。

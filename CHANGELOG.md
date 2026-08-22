@@ -20,7 +20,9 @@ Git 没法 diff；VCI 把工程映射成一个普通文件夹、每个对象一�
 
 ### 新增
 
-- **`ConnectProjectToWorkspace`（新工具，工具数 218 → 219）**：递归遍历工程树，逐对象询问
+- **VCI 五件套进入本包（工具数 203 → 208）**：`CreateVersionControlWorkspace` /
+  `ConnectProjectToWorkspace` / `GetVersionControlWorkspaces` / `GetVersionControlStatus` /
+  `SyncVersionControlWorkspace`。其中 `ConnectProjectToWorkspace` 是全新工具：递归遍历工程树，逐对象询问
   `GetSupportedFileFormats`，支持的就纳管。**粗粒度优先**（能整体纳管就不往下拆），
   不支持的对象**逐条报出**而非静默丢弃。默认 `dryRun=true`。
 - **`tools/vci-watch/`**：约 300 行的看门狗，程序一改一编译就自动导出、写 CHANGELOG、`git commit`。

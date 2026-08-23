@@ -268,11 +268,24 @@ def main():
     sig = project_signal(cfg.get("projectFolder", ""))
     last_sig = st_prev.get("lastSignal")
     last_full = st_prev.get("lastFullCheck", 0)
+    since_full = time.time() - last_full
     force_after = cfg.get("forceFullCheckMinutes", 60) * 60
-    if (sig is not None and last_sig is not None
-            and abs(sig - last_sig) < 0.001
-            and (time.time() - last_full) < force_after):
+    unchanged = (sig is not None and last_sig is not None and abs(sig - last_sig) < 0.001)
+
+    # a) 工程没被动过 → 秒退（除非到了兜底全量时间）
+    if unchanged and since_full < force_after:
         return 0
+
+    # b) 两次完整周期至少隔这么久。有变更的周期可能长达数分钟，
+    #    2 分钟一轮会首尾相接、等于一直挂在博途上。
+    if since_full < cfg.get("minFullCheckMinutes", 10) * 60:
+        return 0
+
+    # c) 待编译退避：上一轮的失败全是"块未编译"时，在工程被动过之前不再反复重试 ——
+    #    未编译的块状态不会自己变好，每轮重试只是白白连博途、让界面闪。
+    if unchanged and st_prev.get("pendingCompile"):
+        if time.time() < st_prev.get("pendingUntil", 0):
+            return 0
 
     # 单实例：上一轮还没跑完就跳过这一轮，绝不叠加（10 分钟一轮 × 一轮可能 90 秒）
     if os.path.exists(LOCK):
@@ -289,6 +302,7 @@ def main():
     deadline = time.time() + timeout_s
     _did_something = [False]
     _killed = [False]
+    _pending = [None, 0]        # (待编译块名摘要, 冷却截止时间)
     eng = None
 
     def _reaper():
@@ -347,8 +361,11 @@ def main():
                 need_compile = [it for it in fails if "inconsistent" in it]
                 hard_fails = [it for it in fails if it not in need_compile]
             else:
+                cool = cfg.get("pendingCompileCooldownMinutes", 30)
+                _pending[0] = names
+                _pending[1] = time.time() + cool * 60
                 log("%d 个块改了但**尚未编译**，VCI 导不出：%s" % (len(need_compile), names))
-                log("  → 在博途里编译一次，下一轮就会自动导出并提交（或把 autoCompile 打开）")
+                log("  → 在博途里编译一次即可；在那之前暂停重试 %d 分钟，避免反复连博途" % cool)
 
         log("导出：%s" % syn.get("message", ""))
         for it in hard_fails:
@@ -402,7 +419,9 @@ def main():
             if noisy:
                 log("本轮结束：引擎峰值内存约 %s MB%s" % (mem or "?", "，**已超时**" if over else ""))
         write_state({"lastSignal": project_signal(cfg.get("projectFolder", "")),
-                     "lastFullCheck": time.time()})
+                     "lastFullCheck": time.time(),
+                     "pendingCompile": _pending[0],
+                     "pendingUntil": _pending[1]})
         try:
             os.remove(LOCK)
         except OSError:

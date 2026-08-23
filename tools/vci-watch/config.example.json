@@ -9,5 +9,7 @@
   "compileSoftwarePaths": [],
   "cycleTimeoutSeconds": 600,
   "lockTimeoutSeconds": 900,
-  "forceFullCheckMinutes": 60
+  "forceFullCheckMinutes": 60,
+  "minFullCheckMinutes": 10,
+  "pendingCompileCooldownMinutes": 30
 }

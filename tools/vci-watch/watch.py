@@ -95,13 +95,43 @@ def cleanup_stale(engine_exe):
 
 def kill_orphan_tia(engine_pid):
     """绝不留下由我们引擎拉起的博途实例。只杀父进程是我们引擎的那些，
-    用户自己开的 GUI（父进程是 explorer）绝不碰。"""
+    用户自己开的 GUI（父进程是 explorer）绝不碰。
+
+    杀之前先把 PID 记进 state：计划任务的 ExecutionTimeLimit（15 分钟）短于最坏一轮，
+    整个 python 被掐死时 finally 跑不到，无头实例就留下来白占内存了（实测有过一个
+    88MB 的残留挂了一整天）。记下来，下一轮 sweep_recorded_tia() 补杀。"""
     out = ps("Get-CimInstance Win32_Process -Filter \"Name='Siemens.Automation.Portal.exe'\" | "
              "Where-Object { $_.ParentProcessId -eq %d } | Select-Object -Expand ProcessId" % int(engine_pid))
-    for line in out.splitlines():
-        line = line.strip()
-        if line.isdigit():
-            kill_pid(int(line), "本轮引擎自己拉起的博途，不该留下")
+    pids = [int(l.strip()) for l in out.splitlines() if l.strip().isdigit()]
+    if not pids:
+        return
+    st = read_state()
+    st["spawnedTiaPids"] = sorted(set(st.get("spawnedTiaPids", []) + pids))
+    write_state(st)
+    for pid in pids:
+        kill_pid(pid, "本轮引擎自己拉起的博途，不该留下")
+    st = read_state()
+    st["spawnedTiaPids"] = [p for p in st.get("spawnedTiaPids", []) if p not in pids]
+    write_state(st)
+
+
+def sweep_recorded_tia():
+    """补杀上一轮记下、但没来得及清掉的无头博途。
+
+    只杀命令行确实是 Openness 无头实例的（-bootstrapper=…Openness.Loader.BootStrapper）——
+    PID 会被系统重用，光凭 PID 下手可能误伤别的进程；工程师的 GUI 命令行里没有
+    -bootstrapper，天然不会命中。"""
+    st = read_state()
+    pids = st.get("spawnedTiaPids") or []
+    if not pids:
+        return
+    for pid in list(pids):
+        cmd = ps("(Get-CimInstance Win32_Process -Filter \"ProcessId=%d\" -EA SilentlyContinue).CommandLine" % int(pid))
+        if cmd and "siemens.automation.portal.exe" in cmd.lower() and "openness.loader.bootstrapper" in cmd.lower():
+            kill_pid(pid, "上一轮没清干净的无头博途")
+    st = read_state()
+    st.pop("spawnedTiaPids", None)
+    write_state(st)
 
 
 class Engine(object):
@@ -187,13 +217,44 @@ def sh(args, cwd=None):
     return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
 
 
-def tia_running():
-    code, out, _ = sh(["powershell", "-NoProfile", "-Command",
-                       "(Get-Process 'Siemens.Automation.Portal' -EA SilentlyContinue|Measure-Object).Count"])
+def user_tia_sessions():
+    r"""工程师自己开着的博途实例数。**不是** Portal.exe 的进程数。
+
+    一台机器上同时可能跑三种 Portal.exe，只有第一种算数：
+      1. 工程师双击 .apXX 开的 GUI —— 命令行里只有工程路径，没有 -bootstrapper。
+      2. 那个 GUI 自己拉起的后台辅助进程（HMICompiler / SearchReplaceBackgroundProcess）——
+         带 -bootstrapper=…BackgroundProcessBootStrapper 和 -processId=<GUI 的 PID>。
+      3. 别的 Openness 客户端拉起的无头实例 —— 带
+         -bootstrapper=Siemens.Automation.Opns.Loader.Impl:…Openness.Loader.BootStrapper。
+
+    按进程数判断会把 2 和 3 也算成"博途开着"：实测一个开着工程的 GUI 就是 3 个进程，
+    而一台没开任何工程、只剩一个无头残留的机器同样数到 1。后者最坏 —— 看门狗判定
+    "博途开着"就起引擎，引擎又找不到能附着的工程，转而自己再拉起一个无头实例，
+    600 秒超时被掐断，留下的残留让下一轮继续为真：整夜每 72 分钟空转一次。
+    带 -bootstrapper 的一律不算，剩下的就是真 GUI 会话。
+    """
+    _, out, _ = sh(["powershell", "-NoProfile", "-Command",
+                    "@(Get-CimInstance Win32_Process -Filter \"Name='Siemens.Automation.Portal.exe'\""
+                    " -EA SilentlyContinue | Where-Object { $_.CommandLine -notlike '*-bootstrapper=*' }).Count"])
     try:
         return int(out.strip() or "0")
     except ValueError:
         return 0
+
+
+def has_open_project(eng):
+    """在 Connect 之前问一句：现在有没有哪个博途进程真开着工程。
+
+    ListPortalProcessProjects 只探测已在跑的进程，自己不会拉起博途；Connect 会。
+    没工程就直接收工，别让 Connect 去"帮忙"开一个 —— 那正是无头残留的来源。
+    行形如 `PID=49452 project=MyProject_V21` / `PID=48004 projects=<empty>`，
+    所以要匹配单数 ` project=`，`projects=` 是"没有"。
+    """
+    try:
+        r = eng.call("ListPortalProcessProjects")
+    except Exception:
+        return True                   # 探测不了就别拦，交给后面的 Attach 判
+    return any(" project=" in it for it in (r.get("items") or []))
 
 
 def block_names(items):
@@ -259,8 +320,8 @@ def main():
     ws_name = cfg.get("workspaceName", "")
     author = cfg.get("gitAuthor", "tia-vci-watch <watch@local>")
 
-    if not tia_running():
-        return 0                      # 博途没开 —— 安静退出，什么都不做
+    if not user_tia_sessions():
+        return 0                      # 工程师没开博途 —— 安静退出，什么都不做
 
     # 廉价前置检查：工程目录没被动过就秒退，连引擎都不启动。
     # 兜底：超过 forceFullCheckMinutes 无论如何全量查一次，不把启发式当唯一依据。
@@ -321,9 +382,14 @@ def main():
     try:
         eng = Engine(exe, tia_version)
         cleanup_stale(exe)
+        sweep_recorded_tia()
         _st = read_state()
         _st.update({"enginePid": eng.p.pid, "startedAt": time.time()})
         write_state(_st)
+        # Connect 之前先确认真有工程可搭 —— 见 has_open_project()
+        if not has_open_project(eng):
+            return 0
+
         eng.call("Connect")
         # 只 Attach，绝不 Open：工程是工程师开的，我们只是搭个车
         att = eng.call("AttachToOpenProject")
@@ -418,10 +484,16 @@ def main():
                 pass
             if noisy:
                 log("本轮结束：引擎峰值内存约 %s MB%s" % (mem or "?", "，**已超时**" if over else ""))
-        write_state({"lastSignal": project_signal(cfg.get("projectFolder", "")),
-                     "lastFullCheck": time.time(),
-                     "pendingCompile": _pending[0],
-                     "pendingUntil": _pending[1]})
+        # 整份覆盖会把 kill_orphan_tia 刚记下的 spawnedTiaPids 一起抹掉 —— 那正是
+        # 用来在下一轮补杀没清干净的无头博途的，必须原样带过去。
+        _final = read_state()
+        _final.update({"lastSignal": project_signal(cfg.get("projectFolder", "")),
+                       "lastFullCheck": time.time(),
+                       "pendingCompile": _pending[0],
+                       "pendingUntil": _pending[1]})
+        _final.pop("enginePid", None)
+        _final.pop("startedAt", None)
+        write_state(_final)
         try:
             os.remove(LOCK)
         except OSError:

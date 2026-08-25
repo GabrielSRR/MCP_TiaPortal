@@ -131,34 +131,136 @@ namespace TiaMcpServer.Siemens
             catch { return string.Empty; }
         }
 
+        /// <summary>
+        /// List every PLC tag table, including the ones nested in user groups. Tables inside a group
+        /// come back group-qualified ("驱动/变频器变量表"); root-level tables keep their bare name.
+        /// Returns null only when the PLC software itself cannot be resolved.
+        /// </summary>
+        /// <remarks>
+        /// Do NOT route this through TryListNamesFromCollection with a "TagTables" hint: the object in
+        /// hand is already the PlcTagTableComposition, so asking it for a *.TagTables* property misses,
+        /// a non-empty hint list also skips the plain-IEnumerable path, and the helper swallows that
+        /// into an empty list. The tool then answered "this PLC has no tag tables" for every
+        /// S7-1200/1500 project ever built — GitHub issue #22.
+        /// </remarks>
         public List<string>? GetPlcTagTables(string softwarePath)
         {
             if (IsProjectNull()) return null;
             var plc = GetPlcSoftware(softwarePath);
             if (plc == null) return null;
 
-            // common shapes: plc.TagTables OR plc.TagTableGroup.TagTables
-            object? tables =
-                TryGetPropertyValue(plc, "TagTables") ??
-                TryGetPropertyValue(TryGetPropertyValue(plc, "TagTableGroup", "TagTableFolder") ?? plc, "TagTables");
+            var group = ResolvePlcTagTableGroup(plc);
+            if (group == null)
+                throw new PortalException(PortalErrorCode.NotFound,
+                    $"Tag table group not found on '{softwarePath}' (plcType={plc.GetType().FullName}). " +
+                    "Tag tables cannot be enumerated for this software object.");
 
-            if (tables == null) return new List<string>();
-            return TryListNamesFromCollection(tables, new[] { "TagTables" }, "TagTables");
+            var result = new List<string>();
+            var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            CollectTagTableNames(group, "", result, visited);
+            return result;
         }
 
-        public bool ExportPlcTagTable(string softwarePath, string tagTableName, string exportPath)
+        /// <summary>
+        /// Export one PLC tag table. <paramref name="tagTableName"/> takes either the bare table name
+        /// (matched anywhere in the group tree) or the group-qualified form returned by
+        /// <see cref="GetPlcTagTables"/>; backslashes count as separators too, so the path printed by
+        /// GetCrossReferences can be pasted straight in.
+        /// </summary>
+        public bool ExportPlcTagTable(string softwarePath, string tagTableName, string exportPath, out string? error)
         {
-            if (IsProjectNull()) return false;
+            error = null;
+            if (IsProjectNull()) { error = "no project is open"; return false; }
             var plc = GetPlcSoftware(softwarePath);
-            if (plc == null) return false;
+            if (plc == null) { error = $"PLC software not found at '{softwarePath}'"; return false; }
 
-            object? tablesRoot = TryGetPropertyValue(plc, "TagTables") ??
-                                 TryGetPropertyValue(plc, "TagTableGroup", "TagTableFolder") ??
-                                 plc;
+            var group = ResolvePlcTagTableGroup(plc);
+            if (group == null) { error = $"tag table group not found on '{softwarePath}'"; return false; }
 
-            var table = TryFindByNameInCollection(tablesRoot, new[] { "TagTables" }, tagTableName);
-            if (table == null) return false;
-            return TryExportEngineeringObject(table, exportPath, out _);
+            var wanted = (tagTableName ?? string.Empty).Replace('\\', '/').Trim('/');
+            var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            var table = FindTagTable(group, "", wanted, visited);
+            if (table == null)
+            {
+                // "no such table" and "found it, but Openness refused the export" used to share one
+                // message, so a caller could not tell a typo from a real failure (GitHub issue #22).
+                var known = GetPlcTagTables(softwarePath) ?? new List<string>();
+                error = $"no tag table named '{tagTableName}' in '{softwarePath}'" +
+                        (known.Count > 0 ? ". Available: " + string.Join(", ", known) : " (this PLC has no tag tables)");
+                return false;
+            }
+            return TryExportEngineeringObject(table, exportPath, out error);
+        }
+
+        /// <summary>The container that owns TagTables (and the user groups below it).</summary>
+        private static object? ResolvePlcTagTableGroup(object plc)
+            => TryGetPropertyValue(plc, "TagTableGroup", "TagTableFolder")
+               // HMI-shaped software hangs the composition straight off the root.
+               ?? (TryGetPropertyValue(plc, "TagTables") != null ? plc : null);
+
+        private static void CollectTagTableNames(object group, string prefix, List<string> result, HashSet<object> visited)
+        {
+            if (!visited.Add(group)) return;
+
+            var tables = TryGetPropertyValue(group, "TagTables");
+            if (tables is IEnumerable tEnum and not string)
+            {
+                foreach (var t in tEnum)
+                {
+                    if (t == null) continue;
+                    var name = TryGetPropertyValue(t, "Name")?.ToString() ?? string.Empty;
+                    if (name.Length == 0) continue;
+                    result.Add(string.IsNullOrEmpty(prefix) ? name : prefix + "/" + name);
+                }
+            }
+
+            var groups = TryGetPropertyValue(group, "Groups", "UserGroups", "SubGroups");
+            if (groups is IEnumerable gEnum and not string)
+            {
+                foreach (var sub in gEnum)
+                {
+                    if (sub == null) continue;
+                    var gname = TryGetPropertyValue(sub, "Name")?.ToString() ?? string.Empty;
+                    var next = string.IsNullOrEmpty(prefix) ? gname : prefix + "/" + gname;
+                    CollectTagTableNames(sub, next, result, visited);
+                }
+            }
+        }
+
+        /// <summary>Walks the same tree as <see cref="CollectTagTableNames"/>, matching a table on
+        /// either its bare name or the group-qualified path that walk would have produced.</summary>
+        private static object? FindTagTable(object group, string prefix, string wanted, HashSet<object> visited)
+        {
+            if (!visited.Add(group)) return null;
+
+            var tables = TryGetPropertyValue(group, "TagTables");
+            if (tables is IEnumerable tEnum and not string)
+            {
+                foreach (var t in tEnum)
+                {
+                    if (t == null) continue;
+                    var name = TryGetPropertyValue(t, "Name")?.ToString() ?? string.Empty;
+                    if (name.Length == 0) continue;
+                    var qualified = string.IsNullOrEmpty(prefix) ? name : prefix + "/" + name;
+                    if (string.Equals(name, wanted, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(qualified, wanted, StringComparison.OrdinalIgnoreCase))
+                        return t;
+                }
+            }
+
+            var groups = TryGetPropertyValue(group, "Groups", "UserGroups", "SubGroups");
+            if (groups is IEnumerable gEnum and not string)
+            {
+                foreach (var sub in gEnum)
+                {
+                    if (sub == null) continue;
+                    var gname = TryGetPropertyValue(sub, "Name")?.ToString() ?? string.Empty;
+                    var next = string.IsNullOrEmpty(prefix) ? gname : prefix + "/" + gname;
+                    var hit = FindTagTable(sub, next, wanted, visited);
+                    if (hit != null) return hit;
+                }
+            }
+            return null;
         }
 
         public void ImportPlcTagTable(string softwarePath, string folderPath, string importPath)

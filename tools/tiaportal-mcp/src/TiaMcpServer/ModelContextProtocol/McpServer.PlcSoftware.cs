@@ -2260,7 +2260,7 @@ namespace TiaMcpServer.ModelContextProtocol
         {
             try
             {
-                var ok = Portal.ExportPlcTagTable(softwarePath, tagTableName, exportPath);
+                var ok = Portal.ExportPlcTagTable(softwarePath, tagTableName, exportPath, out var reason);
                 if (ok)
                 {
                     return new ResponseExportFile
@@ -2271,7 +2271,10 @@ namespace TiaMcpServer.ModelContextProtocol
                     };
                 }
 
-                throw new McpException($"Failed exporting PLC tag table '{tagTableName}' from '{softwarePath}'", McpErrorCode.InternalError);
+                throw new McpException(
+                    $"Failed exporting PLC tag table '{tagTableName}' from '{softwarePath}'" +
+                    (string.IsNullOrWhiteSpace(reason) ? string.Empty : ": " + reason),
+                    McpErrorCode.InternalError);
             }
             catch (Exception ex) when (ex is not McpException)
             {

@@ -171,6 +171,57 @@ if (Test-Path -LiteralPath $hmiDir) {
     Ok ("All templates/hmi JSON files parse ({0} files)" -f @((Get-ChildItem -LiteralPath $hmiDir -Filter "*.json" -File)).Count)
 }
 
+# ── Version consistency ───────────────────────────────────────────────────────
+# The release version used to live in four places that nobody diffed against each
+# other, so they drifted: csproj said 2.5.0, the manifest said 2.5.1, and the
+# 2.5.1 fix reached the v21 branch but never master, a tag, or a release. The
+# CHANGELOG's newest entry is the source of truth; everything else must match it.
+$changelog = Join-Path $root "CHANGELOG.md"
+$csproj    = Join-Path $root "tools\tiaportal-mcp\src\TiaMcpServer\TiaMcpServer.csproj"
+$manifest  = Join-Path $root "manifest\package-manifest.json"
+
+if ((Test-Path -LiteralPath $changelog) -and (Test-Path -LiteralPath $csproj) -and (Test-Path -LiteralPath $manifest)) {
+    $clText = Get-Content -LiteralPath $changelog -Raw -Encoding UTF8
+    $clMatch = [regex]::Match($clText, '(?m)^##\s*\[(?<v>\d+\.\d+\.\d+)\]')
+    if (-not $clMatch.Success) {
+        Fail "CHANGELOG.md: no '## [x.y.z]' entry found — cannot determine the release version"
+    }
+    else {
+        $version = $clMatch.Groups['v'].Value
+        $versionFailures = $failures.Count
+
+        $csText = Get-Content -LiteralPath $csproj -Raw -Encoding UTF8
+        $csMatch = [regex]::Match($csText, '<AssemblyVersion>(?<v>[^<]+)</AssemblyVersion>')
+        if (-not $csMatch.Success) {
+            Fail "TiaMcpServer.csproj: no <AssemblyVersion> element"
+        }
+        elseif ($csMatch.Groups['v'].Value -ne $version) {
+            Fail ("Version mismatch: CHANGELOG says {0}, TiaMcpServer.csproj AssemblyVersion says {1}" -f $version, $csMatch.Groups['v'].Value)
+        }
+
+        $mf = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($mf.bundleVersion -ne $version) {
+            Fail ("Version mismatch: CHANGELOG says {0}, manifest bundleVersion says {1}" -f $version, $mf.bundleVersion)
+        }
+        if ($mf.packageName -notlike ("*v{0}_*" -f $version)) {
+            Fail ("Version mismatch: manifest packageName '{0}' does not carry v{1}" -f $mf.packageName, $version)
+        }
+
+        # The shipped engine is a binary, so a stale runtime/ is invisible in a diff.
+        $exe = Join-Path $root "runtime\v21\TiaMcpServer.exe"
+        if (Test-Path -LiteralPath $exe) {
+            $fileVersion = (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
+            if ($fileVersion -notlike ("{0}*" -f $version)) {
+                Fail ("Version mismatch: CHANGELOG says {0}, runtime\v21\TiaMcpServer.exe reports {1} — rebuild the public engine" -f $version, $fileVersion)
+            }
+        }
+
+        if ($failures.Count -eq $versionFailures) {
+            Ok ("Version is consistent across CHANGELOG / csproj / manifest / runtime engine ({0})" -f $version)
+        }
+    }
+}
+
 if ($failures.Count -gt 0) {
     Write-Host ""
     Write-Host "Validation FAILED ($($failures.Count) issue(s))." -ForegroundColor Red

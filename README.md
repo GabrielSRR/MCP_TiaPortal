@@ -2,7 +2,7 @@
 
 > 当前版本见上方 Release 徽章与 [CHANGELOG.md](CHANGELOG.md)（README 不再硬编码版本号）。
 
-[English](README.en.md) · **中文**
+[English](README.en.md) · **中文** · [Português](README.pt-BR.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/bulaofen0036-coder/TIA_Portal_Openness_MCP)](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/releases) [![validate-bundle](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/actions/workflows/validate.yml/badge.svg)](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/actions/workflows/validate.yml)
 

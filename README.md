@@ -2,7 +2,7 @@
 
 > A versão atual aparece no selo Release acima e em [CHANGELOG.md](CHANGELOG.md) (o README não fixa mais o número da versão).
 
-[English](README.en.md) · 中文 · **Português**
+[English](README.en.md) · [中文](README.zh-CN.md) · **Português**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/bulaofen0036-coder/TIA_Portal_Openness_MCP)](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/releases) [![validate-bundle](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/actions/workflows/validate.yml/badge.svg)](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP/actions/workflows/validate.yml)
 

@@ -23,24 +23,17 @@ namespace TiaMcpServer.ModelContextProtocol
             {
                 var checks = new List<DoctorCheck>();
 
-                // 1) Environment prerequisites, shared with `tia doctor` so the two cannot drift.
-                //    Covers TIA install, Openness assembly resolution (TIA can be installed WITHOUT
-                //    Openness — the old check said OK and the engine then died on first call),
-                //    engine/TIA version match, .NET Framework 4.8, and Windows MOTW blocking.
+                // 1) TIA installation
                 int? inUse = Engineering.TiaMajorVersion == 0 ? (int?)null : Engineering.TiaMajorVersion;
                 int? detected = Engineering.DetectTiaMajorVersion();
-                foreach (var c in Runtime.EnvironmentDoctor.Run(EngineRouter.CompiledTiaMajorVersion, inUse ?? detected))
+                bool tiaOk = inUse != null || detected != null;
+                checks.Add(new DoctorCheck
                 {
-                    checks.Add(new DoctorCheck
-                    {
-                        Name = c.NameEn,
-                        Ok = c.Ok,
-                        Detail = c.DetailEn,
-                        Fix = c.FixEn
-                    });
-                }
-                bool envOk = checks.All(c => c.Ok);
-                string? firstEnvProblem = checks.FirstOrDefault(c => !c.Ok)?.Name;
+                    Name = "TIA Portal installation",
+                    Ok = tiaOk,
+                    Detail = tiaOk ? $"detected V{(inUse ?? detected)}" : "no TIA Portal detected",
+                    Fix = tiaOk ? null : "Install TIA Portal V18+ with the Openness option, then set the user environment variable TiaPortalLocation to the install path (e.g. C:\\Program Files\\Siemens\\Automation\\Portal V21)."
+                });
 
                 // 2) Openness group membership (+ optional auto-fix)
                 bool groupOk;
@@ -76,13 +69,13 @@ namespace TiaMcpServer.ModelContextProtocol
                 });
 
                 string next;
-                if (!envOk) next = $"(fix first: {firstEnvProblem})";
+                if (!tiaOk) next = "(install TIA Portal)";
                 else if (!groupOk) next = "EnsureOpennessUserGroup";
                 else if (!connected) next = "Connect";
                 else if (!hasProject) next = "AttachToOpenProject";
                 else next = "GetProjectTree";
 
-                bool ready = envOk && groupOk;
+                bool ready = tiaOk && groupOk;
                 var failed = checks.Where(c => !c.Ok).Select(c => c.Name).ToList();
                 string summary = ready && connected && hasProject
                     ? "Environment healthy — project open, ready to work."

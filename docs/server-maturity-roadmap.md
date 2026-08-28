@@ -21,10 +21,8 @@ OPC UA browser, encrypted vault, Git UI). Capability boundary table: SKILL.md §
   via `Modes → PcInterfaces → TargetInterfaces`; also fixed the `StopModules` selection
   (`StopAll`, not the non-existent "StopModule").
 - **Verified** end-to-end on a real S7-1200 (江夏 安全PLC) → `state=Success, 0 errors`.
-- **Follow-up — DONE (issue #14):** first-PG/PC-interface auto-selection did bite on a multi-NIC
-  PC (WLAN + VPN + PLCSIM). Routes are now ranked by IP proximity to the CPU, `DownloadToPlc`
-  takes optional `pgPcInterface` / `targetIpAddress` overrides, and `CheckDownloadReadiness`
-  lists every candidate route read-only.
+- **Follow-up (only if it ever bites):** the route auto-selects the FIRST PG/PC interface —
+  add a `targetInterfaceName` param only if multi-NIC selection becomes a real problem.
 
 ---
 

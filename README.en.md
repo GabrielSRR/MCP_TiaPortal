@@ -1,6 +1,4 @@
-# TIA Portal MCP Server (V20 + V21 · S7DCL · CLI · read-only online monitoring · one-click config · Doctor)
-
-> Current version: see the Release badge below and [CHANGELOG.md](CHANGELOG.md) (this README no longer hardcodes a version).
+# TIA Portal MCP Server (v2.2.8 · V20 + V21 · S7DCL · CLI · read-only online monitoring · one-click config · Doctor)
 
 **English** · [中文](README.md)
 
@@ -36,13 +34,9 @@ to run.
 > [Quick Start](#quick-start) below.)
 
 1. **Prepare**: install **TIA Portal V20 or V21** + **.NET Framework 4.8**; add your
-   Windows user to the local **`Siemens TIA Openness`** group and **log off/on once**
-   (the group is not effective until re-login — the single most common blocker).
+   Windows user to the local **`Siemens TIA Openness`** group and log off/on once.
    **Use the exe matching your installed version** — the bundle root ships
    `tia.cmd` (V21) / `tia-v20.cmd` (V20); all other paths are auto-resolved.
-   - **Health-check first**: run `tia.cmd doctor` (V20: `tia-v20.cmd doctor`) once after
-     install — it checks TIA install / exe-version match / Openness group / host
-     registration and prints the exact fix per problem (`--fix` auto-adds the group).
 2. **Prewarm (optional, recommended)**: double-click `scripts\预热.bat` and leave the
    window open. It keeps one headless TIA resident so every later command connects in
    **~1s** (without it, each run cold-starts ~3 min). Press `Ctrl+C` to close.
@@ -92,13 +86,10 @@ to run.
    - let it auto-read `HKLM\SOFTWARE\Siemens\Automation\_InstalledSW\TIAP{20|21}\TIA_Opns\Path`.
    With multiple versions installed, pass `--tia-major-version 20` (or `21`) explicitly.
 2. **Mount the MCP — one command, fully automatic.**
-   Double-click `配置MCP.bat` in the bundle root (V20: `配置MCP-v20.bat`), or run `tia.cmd config`.
 
-   > Engine exe locations by distribution: Release zip →
-   > `tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\` (V21) /
-   > `...\bin-v20\Release\net48\` (V20); git clone → `runtime\v21\`
-   > (V20 runtime is not shipped in git — download the Release zip).
-   > All launcher scripts resolve both layouts automatically.
+   ```powershell
+   .\tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe config
+   ```
 
    It self-discovers everything: its own absolute path, the installed TIA Portal
    (registry) and version, and the version-matching exe (V20/V21 picked for you) —
@@ -106,9 +97,8 @@ to run.
    **Claude Desktop / Claude Code / Cursor / VS Code** (existing config backed up
    as `.bak`, other servers preserved). Restart the AI client to load it.
    Options: `config --host vscode` (or `claude|claude-code|cursor`), `config --print`
-   to copy a snippet manually. By default it writes the **lite profile**
-   (`TIA_MCP_PROFILE=lite`, ~42 essential tools) so weaker models are not drowned and
-   VS Code's 128-tool cap never trips; pass `config --full` for the whole tool surface.
+   to copy a snippet manually, `config --lite` (v2.2.8) to expose only ~42 essential
+   tools via `TIA_MCP_PROFILE=lite` — best for weaker models and VS Code's 128-tool cap.
    If anything fails to connect, run `tia.cmd doctor` (v2.2.8): a one-shot environment
    check (TIA install, exe/version match, Openness group, host registration) with the
    exact fix per problem; `--fix` auto-adds the Openness group. Since v2.2.7 the exe also **self-routes**: if it was

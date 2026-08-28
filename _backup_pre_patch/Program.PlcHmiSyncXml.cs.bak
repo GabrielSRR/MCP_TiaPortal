@@ -384,7 +384,7 @@ namespace TiaMcpServer
 
         private static string MlText(string id, string composition, string text)
         {
-            return $@"<MultilingualText ID=""{id}"" CompositionName=""{composition}""><ObjectList><MultilingualTextItem ID=""{id}_1"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>{SecurityElement.Escape(text)}</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>";
+            return $@"<MultilingualText ID=""{id}"" CompositionName=""{composition}""><ObjectList><MultilingualTextItem ID=""{id}_1"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>{SecurityElement.Escape(text)}</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>";
         }
 
         private static void WritePlcChineseCommentsMinimalXml(string dir)
@@ -629,7 +629,7 @@ namespace TiaMcpServer
       <SetENOAutomatically>false</SetENOAutomatically>
     </AttributeList>
     <ObjectList>
-      <MultilingualText ID=""A1"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A2"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>LAD电机控制功能块，包含中文块注释、网络标题和网络说明。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+      <MultilingualText ID=""A1"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A2"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>LAD电机控制功能块，包含中文块注释、网络标题和网络说明。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
       <SW.Blocks.CompileUnit ID=""1"" CompositionName=""CompileUnits"">
         <AttributeList>
           <NetworkSource>
@@ -655,8 +655,8 @@ namespace TiaMcpServer
           <ProgrammingLanguage>LAD</ProgrammingLanguage>
         </AttributeList>
         <ObjectList>
-          <MultilingualText ID=""A3"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A4"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>启动条件成立时置位运行状态。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
-          <MultilingualText ID=""A5"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""A6"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>启动运行自保持</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""A3"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A4"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>启动条件成立时置位运行状态。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""A5"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""A6"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>启动运行自保持</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
         </ObjectList>
       </SW.Blocks.CompileUnit>
       <SW.Blocks.CompileUnit ID=""2"" CompositionName=""CompileUnits"">
@@ -690,8 +690,8 @@ namespace TiaMcpServer
           <ProgrammingLanguage>LAD</ProgrammingLanguage>
         </AttributeList>
         <ObjectList>
-          <MultilingualText ID=""A7"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A8"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>停止、故障或手动使能取消时复位运行状态。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
-          <MultilingualText ID=""A9"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""AA"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>停止故障复位</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""A7"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""A8"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>停止、故障或手动使能取消时复位运行状态。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""A9"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""AA"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>停止故障复位</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
         </ObjectList>
       </SW.Blocks.CompileUnit>
     </ObjectList>
@@ -862,14 +862,14 @@ namespace TiaMcpServer
       <MemoryLayout>Optimized</MemoryLayout><Name>FB2_SCL_Count</Name><Namespace /><Number>2</Number><ProgrammingLanguage>SCL</ProgrammingLanguage><SetENOAutomatically>false</SetENOAutomatically>
     </AttributeList>
     <ObjectList>
-      <MultilingualText ID=""B1"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""B2"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>SCL计数功能块，包含中文块注释、网络标题和网络说明。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+      <MultilingualText ID=""B1"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""B2"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>SCL计数功能块，包含中文块注释、网络标题和网络说明。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
       <SW.Blocks.CompileUnit ID=""1"" CompositionName=""CompileUnits"">
         <AttributeList><NetworkSource><StructuredText xmlns=""http://www.siemens.com/automation/Openness/SW/NetworkSource/StructuredText/v4"">
 {st}
         </StructuredText></NetworkSource><ProgrammingLanguage>SCL</ProgrammingLanguage></AttributeList>
         <ObjectList>
-          <MultilingualText ID=""B3"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""B4"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>定时器到达后计数加一，达到上限后清零。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
-          <MultilingualText ID=""B5"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""B6"" CompositionName=""Items""><AttributeList><Culture>en-US</Culture><Text>一秒节拍计数</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""B3"" CompositionName=""Comment""><ObjectList><MultilingualTextItem ID=""B4"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>定时器到达后计数加一，达到上限后清零。</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+          <MultilingualText ID=""B5"" CompositionName=""Title""><ObjectList><MultilingualTextItem ID=""B6"" CompositionName=""Items""><AttributeList><Culture>zh-CN</Culture><Text>一秒节拍计数</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
         </ObjectList>
       </SW.Blocks.CompileUnit>
     </ObjectList>

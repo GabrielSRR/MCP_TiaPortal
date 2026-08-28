@@ -357,7 +357,7 @@ namespace TiaMcpServer.ModelContextProtocol
             if (string.IsNullOrWhiteSpace(commentZhCn)) return;
             member.Add(new System.Xml.Linq.XElement(InterfaceNs + "Comment",
                 new System.Xml.Linq.XElement(InterfaceNs + "MultiLanguageText",
-                    new System.Xml.Linq.XAttribute("Lang", "en-US"),
+                    new System.Xml.Linq.XAttribute("Lang", "zh-CN"),
                     commentZhCn)));
         }
 
@@ -372,7 +372,7 @@ namespace TiaMcpServer.ModelContextProtocol
                         new System.Xml.Linq.XAttribute("ID", itemId),
                         new System.Xml.Linq.XAttribute("CompositionName", "Items"),
                         new System.Xml.Linq.XElement("AttributeList",
-                            new System.Xml.Linq.XElement("Culture", "en-US"),
+                            new System.Xml.Linq.XElement("Culture", "zh-CN"),
                             new System.Xml.Linq.XElement("Text", textZhCn ?? "")))));
         }
     }

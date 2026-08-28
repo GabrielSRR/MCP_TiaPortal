@@ -2,7 +2,7 @@
 
 > Current version: see the Release badge below and [CHANGELOG.md](CHANGELOG.md) (this README no longer hardcodes a version).
 
-**English** · [中文](README.md)
+**English** · [中文](README.zh-CN.md) · [Português](README.pt-BR.md)
 
 > **v2.0 — the same exe is also a declarative CLI (`tia`).** Any AI emits a
 > YAML/JSON spec, any engineer runs one command (`tia gen spec.yaml`) — no MCP

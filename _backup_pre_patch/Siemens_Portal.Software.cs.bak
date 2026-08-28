@@ -1098,7 +1098,7 @@ namespace TiaMcpServer.Siemens
                 if (col == null)
                     throw new PortalException(PortalErrorCode.NotFound, $"TechnologyObjects collection not found. plcType={plc.GetType().FullName} groupType={group.GetType().FullName}");
 
-                if (TryImportEngineeringObjectIntoCollection(col, PrepareXmlForImport(importPath), out _, out var err)) return;
+                if (TryImportEngineeringObjectIntoCollection(col, importPath, out _, out var err)) return;
                 throw new PortalException(PortalErrorCode.ImportFailed, err ?? "ImportTechnologyObject failed");
             }
             catch (PortalException)
@@ -2786,7 +2786,7 @@ namespace TiaMcpServer.Siemens
                         {
                             var textTarget = JsonString(itemNode, "textProperty");
                             if (string.IsNullOrWhiteSpace(textTarget)) textTarget = "Text";
-                            if (!TrySetMultilingualText(item, textTarget!, text!, JsonString(itemNode, "culture") ?? "en-US"))
+                            if (!TrySetMultilingualText(item, textTarget!, text!, JsonString(itemNode, "culture") ?? "zh-CN"))
                             {
                                 failed.Add($"{name}.{textTarget}: text write failed");
                             }
@@ -4850,7 +4850,7 @@ namespace TiaMcpServer.Siemens
                 if (screens == null)
                     throw new PortalException(PortalErrorCode.NotFound, $"Screens collection not found. swType={sw.GetType().FullName} groupType={group.GetType().FullName}");
 
-                if (TryImportEngineeringObjectIntoCollection(screens, PrepareXmlForImport(importPath), out _, out var err))
+                if (TryImportEngineeringObjectIntoCollection(screens, importPath, out _, out var err))
                     return;
 
                 throw new PortalException(PortalErrorCode.ImportFailed, err ?? "ImportHmiScreen failed");
@@ -4889,7 +4889,7 @@ namespace TiaMcpServer.Siemens
                 if (tables == null)
                     throw new PortalException(PortalErrorCode.NotFound, $"TagTables collection not found. swType={sw.GetType().FullName} groupType={group.GetType().FullName}");
 
-                if (TryImportEngineeringObjectIntoCollection(tables, PrepareXmlForImport(importPath), out _, out var err))
+                if (TryImportEngineeringObjectIntoCollection(tables, importPath, out _, out var err))
                     return;
 
                 throw new PortalException(PortalErrorCode.ImportFailed, err ?? "ImportHmiTagTable failed");
@@ -4918,7 +4918,7 @@ namespace TiaMcpServer.Siemens
                 if (connections == null)
                     throw new PortalException(PortalErrorCode.NotFound, $"Connections collection not found. swType={sw.GetType().FullName}");
 
-                if (TryImportEngineeringObjectIntoCollection(connections, PrepareXmlForImport(importPath), out _, out var err))
+                if (TryImportEngineeringObjectIntoCollection(connections, importPath, out _, out var err))
                     return;
 
                 throw new PortalException(PortalErrorCode.ImportFailed, err ?? "ImportHmiConnection failed");

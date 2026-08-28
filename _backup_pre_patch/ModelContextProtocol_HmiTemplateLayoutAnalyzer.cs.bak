@@ -221,7 +221,7 @@ namespace TiaMcpServer.ModelContextProtocol
         {
             if (node == null) return "";
             if (node is JsonValue value) return StripHtmlText(value.ToString());
-            if (node is JsonObject obj) return StripHtmlText(obj["en-US"]?.ToString() ?? obj["zh-CN"]?.ToString() ?? obj["zh"]?.ToString() ?? obj.FirstOrDefault().Value?.ToString() ?? "");
+            if (node is JsonObject obj) return StripHtmlText(obj["zh-CN"]?.ToString() ?? obj["zh"]?.ToString() ?? obj.FirstOrDefault().Value?.ToString() ?? "");
             return StripHtmlText(node.ToString());
         }
 

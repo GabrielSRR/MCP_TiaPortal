@@ -979,11 +979,8 @@ matches **§12** in this file; exercise it on your own Unified RT project.
 Root cause + fix in `Portal.cs::DownloadToPlc` (each step verified against the V21 PublicAPI):
 1. **Cast**: `ConnectionConfiguration` does NOT implement `IConfiguration`, but a
    `ConfigurationTargetInterface` (`Modes → PcInterfaces → TargetInterfaces`) DOES.
-   `SelectDownloadRoute` navigates to a target and passes it to `Download()`. On a multi-NIC PC
-   it ranks the routes and picks the PG/PC adapter sharing an IPv4 /24 with the CPU (issue #14 —
-   WLAN/VPN adapters enumerate first and `ApplyConfiguration` "succeeds" on them too). Override
-   with `DownloadToPlc(pgPcInterface:…)` / `(targetIpAddress:…)`; `CheckDownloadReadiness`
-   lists every route in `meta.downloadRoutes`.
+   `TrySelectDownloadTargetInterface` navigates to the first target and passes it to
+   `Download()`. (⚠ auto-selects the FIRST PG/PC interface — on a multi-NIC PC confirm the adapter.)
 2. **Stop prompt**: `StopModulesSelections` is `{ NoAction, StopAll }`; the handler used a
    non-existent `"StopModule"` that silently parsed to nothing, leaving the prompt "unhandled"
    and aborting every download. Fixed to `StopAll`.

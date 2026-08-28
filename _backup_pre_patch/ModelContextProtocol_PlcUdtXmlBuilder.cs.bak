@@ -165,7 +165,7 @@ namespace TiaMcpServer.ModelContextProtocol
             {
                 element.Add(new XElement(InterfaceNs + "Comment",
                     new XElement(InterfaceNs + "MultiLanguageText",
-                        new XAttribute("Lang", "en-US"),
+                        new XAttribute("Lang", "zh-CN"),
                         member.CommentZhCn)));
             }
 
@@ -182,7 +182,7 @@ namespace TiaMcpServer.ModelContextProtocol
                     x.Attribute("Datatype")?.Value ?? "",
                     ReadExternalWritable(x),
                     x.Descendants().FirstOrDefault(y => y.Name.LocalName == "MultiLanguageText" &&
-                                                        (y.Attribute("Lang")?.Value ?? "") == "en-US")?.Value ?? ""))
+                                                        (y.Attribute("Lang")?.Value ?? "") == "zh-CN")?.Value ?? ""))
                 .ToArray();
         }
 

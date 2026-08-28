@@ -590,7 +590,7 @@ namespace TiaMcpServer.Siemens
             }
             catch (Exception ex)
             {
-                var pex = ex as PortalException ?? new PortalException(PortalErrorCode.ImportFailed, ex.Message, null, ex);
+                var pex = ex as PortalException ?? new PortalException(PortalErrorCode.ImportFailed, "Import failed", null, ex);
                 pex.Data["softwarePath"] = softwarePath;
                 pex.Data["groupPath"] = groupPath;
                 pex.Data["importPath"] = importPath;

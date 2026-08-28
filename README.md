@@ -1,6 +1,4 @@
-# TIA Portal MCP 完整交付包（V20+V21 + S7DCL + CLI + 在线只读监控 + 一键配置 + Doctor 体检）
-
-> 当前版本见上方 Release 徽章与 [CHANGELOG.md](CHANGELOG.md)（README 不再硬编码版本号）。
+# TIA Portal MCP 完整交付包（**v2.2.8** / V20+V21 + S7DCL + CLI + 在线只读监控 + 一键配置 + Doctor 体检）
 
 [English](README.en.md) · **中文**
 
@@ -18,8 +16,7 @@
 > 第一次用？**不需要 MCP 客户端、不需要写代码。** 装好 TIA 后照这 3 步，几分钟内生成第一个工程。
 > （想接 Cursor / Claude Desktop 等 AI 客户端走 MCP？跳到下方 [上手步骤](#上手步骤)。）
 
-1. **准备**：装好 **TIA Portal V20 或 V21** + **.NET Framework 4.8**；把当前 Windows 用户加入本地组 **`Siemens TIA Openness`**，**注销重登一次**（不重登组不生效，这是最常见卡点）。**装的是哪个版本就用哪个**——交付包根目录已备好 `tia.cmd`（V21）/ `tia-v20.cmd`（V20），其余路径自动选。
-   - **装完先体检**：跑一次 `tia.cmd doctor`（V20 用 `tia-v20.cmd doctor`）——一次检查 TIA 安装 / exe 版本匹配 / Openness 用户组 / 宿主注册，每项给修法；加 `--fix` 自动补用户组。先体检再干活，能省掉后面 90% 的排障。
+1. **准备**：装好 **TIA Portal V20 或 V21** + **.NET Framework 4.8**；把当前 Windows 用户加入本地组 **`Siemens TIA Openness`**，注销重登一次。**装的是哪个版本就用哪个**——交付包根目录已备好 `tia.cmd`（V21）/ `tia-v20.cmd`（V20），其余路径自动选。
 2. **预热（可选但强烈推荐）**：双击 `scripts\预热.bat`，留着这个窗口。它常驻一个无界面 TIA，让之后每条命令 **~1 秒**连上（不预热则每次冷启动约 3 分钟）。用完按 `Ctrl+C` 关闭。
 3. **生成工程**：把现成模板 `templates\project-blueprints\scaffold_spec_motor.json`（或 `scaffold_spec_start_stop.json`）**拖到 `scripts\生成工程.bat` 图标上**——一条龙建项目→加 PLC/HMI→写块→编译→存盘。退出码 `0` 即成功。
    - 想改成自己的需求：让任意 AI 照 [`docs/AI_spec_prompt.md`](docs/AI_spec_prompt.md) 产出一份 spec（YAML/JSON 都行），再拖给 `生成工程.bat`。
@@ -62,14 +59,7 @@
 
 **与 IDE 无关**：凡支持 MCP 的客户端（Cursor、VS Code、Claude Desktop、自研 HTTP 客户端等）均可使用同一 `TiaMcpServer.exe`。若某 IDE 中「看不到某个工具」，属于 **客户端工具描述符/缓存** 问题，不是交付包裁剪能力；见 `docs/mcp-ide-and-tool-visibility.md`。
 
-**两种获取方式，引擎 exe 位置不同（脚本已自动兼容两种布局）**：
-
-| 获取方式 | V21 引擎 exe | V20 引擎 exe |
-|---|---|---|
-| **Release 交付 zip**（推荐） | `tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe` | `tools\...\bin-v20\Release\net48\TiaMcpServer.exe` |
-| **git clone 本仓库** | `runtime\v21\TiaMcpServer.exe` | 不随仓库分发——请下载 Release zip |
-
-根目录的 `配置MCP.bat` / `tia.cmd` / `scripts\*.bat` 会按上表顺序自动找 exe，**无需关心布局**；手动配置参考 `cursor-mcp.example.json`（把 `REPLACE_ME` 换成你的实际目录）。其它文档若出现 `…\PID博途块\…` 等开发机路径，仅为作者构建位置，**不要求**克隆源码仓库。
+**与源码仓库无关**：接收方只需解压本包；在 MCP 配置里把 `command` 指到本包内的 `tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe`（见 `cursor-mcp.example.json`，将 `REPLACE_ME` 换成本包根目录）。其它文档若出现 `…\PID博途块\…` 等开发机路径，仅为作者构建位置，**不要求**克隆该仓库。
 
 ---
 
@@ -79,9 +69,7 @@
 
 | 分支 | 目标版本 | 维护方式 |
 |------|----------|----------|
-| `master` | TIA Portal V20 / V21 | 官方主线（日常改动都进这里） |
-| `v21` | TIA Portal V21 / Openness V21 | 官方；从 master 派生，只承接 V21 专属适配 |
-| `v20` | TIA Portal V20 / Openness V20 | 官方；从 master 派生，只承接 V20 专属适配 |
+| `master` | TIA Portal V20 / V21 | 官方主线 |
 | `v19` | TIA Portal V19 / Openness V19 | 社区贡献 |
 | `v18` | TIA Portal V18 / Openness V18 | 社区贡献 |
 | `v17` | TIA Portal V17 / Openness V17 | 社区贡献 |
@@ -90,7 +78,6 @@
 **怎么贡献**
 
 - 针对某个旧版本的适配 / 修复，请把 PR 提到**对应的版本分支**（如 V17 的改动 → `v17`），不要直接进 `master`。
-- `v21` / `v20` 是官方版本线：**同时适用于两个版本的改动仍然进 `master`**；只有当某个修复会改变另一个版本的行为、或依赖该版本独有的 Openness API 时，才提到对应的版本分支。这样双版本共用的代码只维护一份。
 - 旧版本的 Openness API 与块 XML 差异较大，分支化可以让各版本独立验证、互不影响主线用户。
 - 若某项修复足够通用且稳定，欢迎再单独拆一个小 PR 回 `master`。
 - 提 PR 时请**不要提交**：TIA 工程文件（`.apXX`）、`bin` / `obj`、日志、截图、备份、本机绝对路径产物、临时验证工程。
@@ -112,15 +99,19 @@
    - 首次连接时在 TIA 弹窗中授权 **Openness**。
 
 2. **挂载 MCP（一条命令，全自动）**  
-   **双击根目录的 `配置MCP.bat`**（V20 用 `配置MCP-v20.bat`）即可；命令行等价写法：`tia.cmd config`。
+   在交付包里任选一个 exe 运行：
+
+   ```powershell
+   .\tools\tiaportal-mcp\src\TiaMcpServer\bin\Release\net48\TiaMcpServer.exe config
+   ```
 
    它会**自动发现一切**：自己的绝对路径、注册表里的博途安装与版本、与版本匹配的 exe（V20/V21 自动选对），然后把 `tia-portal` 条目一次性写进本机检测到的所有 AI 客户端配置——**Claude Desktop / Claude Code / Cursor / VS Code**（原配置自动备份 `.bak`，其它 server 原样保留）。重启 AI 客户端即生效。  
    - 只配某一个宿主：`config --host vscode`（可选 `claude|claude-code|cursor|vscode`）；  
    - 只看不写（手动粘贴其它宿主）：`config --print`；  
-   - **默认写入精简档**（`TIA_MCP_PROFILE=lite`，约 42 个核心工具）——弱模型不会被 200+ 工具淹没，VS Code 的 128 工具上限也不会爆；要全量工具面改跑 `config --full`；  
+   - **模型较弱 / 客户端限工具数（如 VS Code 上限 128）**：`config --lite` —— 配置里自动带 `TIA_MCP_PROFILE=lite`，只暴露约 42 个核心工具（v2.2.8）；  
    - **连不上 / 报错**：`tia.cmd doctor` 一键体检（TIA 安装 / exe 版本匹配 / Openness 用户组 / 宿主注册状态，每项给修法；`--fix` 自动补用户组，v2.2.8）；  
    - **拿错 exe 也没关系**：v2.2.7 起 exe 会按实际 TIA 版本**自动转投**正确的兄弟 exe（V21 exe 在纯 V20 机器上照常可用）。  
-   - 手动配置兜底：复制 `cursor-mcp.example.json` 片段，把 `REPLACE_ME` 换成本包根目录；exe 路径按上文「两种获取方式」表选（zip 用 `tools\...\bin[-v20]\Release\net48`，git clone 用 `runtime\v21`）；非标准安装位置在 `args` 加 `--tia-portal-location "<安装根>" --tia-major-version <20|21>`。
+   - 手动配置兜底：复制 `cursor-mcp.example.json` 片段，把 `REPLACE_ME` 换成本包根目录，V21 用 `bin\Release\net48\TiaMcpServer.exe`、V20 用 `bin-v20\Release\net48\TiaMcpServer.exe`；非标准安装位置在 `args` 加 `--tia-portal-location "<安装根>" --tia-major-version <20|21>`。
 
 3. **首次调用顺序**  
    - `Bootstrap` → `Connect` → `OpenProject`（或 `CreateProject`）→ `GetProjectTree`，从树中读取真实的 `PLC_xxx` / `HMI_RT_xxx` 路径再继续。
@@ -150,8 +141,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Validate-Bundle.ps
 ---
 
 ## 文档地图
-
-> **新手只需要按顺序看两处：本 README（上手）→ [`docs/README.md`](docs/README.md)（全部文档的导航与阅读顺序）。** 下表是完整清单，供检索。
 
 | 路径 | 说明 |
 |------|------|
@@ -208,8 +197,7 @@ Bootstrap → Connect → CreateProject → AddDeviceWithFallback → AddHardwar
 
 | 路径 | 说明 |
 |------|------|
-| `tools/tiaportal-mcp/src/TiaMcpServer/bin/Release/net48/` | `TiaMcpServer.exe` 与依赖（Release zip 布局；V20 在 `bin-v20/...`） |
-| `runtime/v21/` | `TiaMcpServer.exe` 与依赖（git clone 布局） |
+| `tools/tiaportal-mcp/src/TiaMcpServer/bin/Release/net48/` | `TiaMcpServer.exe` 与依赖 |
 | `scripts/Validate-Bundle.ps1` | 交付包完整性校验 |
 | `templates/project-blueprints/full_plc_hmi_project.json` | 完整项目蓝图 |
 | `templates/plc/` | Tag、UDT、DB、FC、FB、LAD 配方、SCL 示例 |

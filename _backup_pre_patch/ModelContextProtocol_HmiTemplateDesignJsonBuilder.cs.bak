@@ -58,7 +58,7 @@ namespace TiaMcpServer.ModelContextProtocol
                 if (!string.IsNullOrWhiteSpace(text))
                 {
                     item["text"] = text;
-                    item["culture"] = "en-US";
+                    item["culture"] = "zh-CN";
                 }
 
                 if (node["Properties"] is JsonObject || node["properties"] is JsonObject)
@@ -118,7 +118,7 @@ namespace TiaMcpServer.ModelContextProtocol
 
             if (node is JsonObject obj)
             {
-                var zh = obj["en-US"]?.ToString() ?? obj["zh-CN"]?.ToString() ?? obj["zh"]?.ToString() ?? obj.FirstOrDefault().Value?.ToString() ?? "";
+                var zh = obj["zh-CN"]?.ToString() ?? obj["zh"]?.ToString() ?? obj.FirstOrDefault().Value?.ToString() ?? "";
                 return StripHtmlText(zh);
             }
 

@@ -276,7 +276,7 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
-        [McpServerTool(Name = "EnsureUnifiedHmiConnection"), Description("[L2][HMI-Unified] Create or verify the PLC↔HMI communication connection (HMI_Connection_1 by default). Requires: Connect + OpenProject + both PLC and Unified HMI devices. Must exist before PLC-backed HMI tags can exchange data. Call before EnsureUnifiedHmiTag with plcTag binding. UNIFIED PANELS ONLY: on Classic/Comfort/Basic panels (KTP Basic, TP/KTP Comfort) this connection cannot be created via Openness (CommunicationConnections service is not exposed); if the project needs end-to-end HMI automation, use a WinCC Unified panel instead of a classic one.")]
+        [McpServerTool(Name = "EnsureUnifiedHmiConnection"), Description("[L2][HMI-Unified] Create or verify the PLC↔HMI communication connection (HMI_Connection_1 by default). Requires: Connect + OpenProject + both PLC and Unified HMI devices. Must exist before PLC-backed HMI tags can exchange data. Call before EnsureUnifiedHmiTag with plcTag binding.")]
         public static ResponseObjectDescribe EnsureUnifiedHmiConnection(
             [Description("hmiSoftwarePath: path to HMI software (e.g. 'HMI_RT_1')")] string hmiSoftwarePath,
             [Description("connectionName: HMI connection name")] string connectionName = "HMI_Connection_1",
@@ -294,7 +294,7 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
-        [McpServerTool(Name = "EnsureUnifiedHmiScreenItem"), Description("[L2][HMI-Unified] Create or verify a single Unified HMI control (button, lamp, IO field, etc.) on a screen. Requires: Connect + OpenProject + EnsureUnifiedHmiScreen. itemType: Button, Rectangle (lamp/indicator/background — has NO text), Text (static text label = HmiText), IOField (value display/entry), or full CLR type name. For a text caption/label ALWAYS use Text, never Rectangle (a Rectangle has no Text property and renders blank if given text). For a complete screen layout use ApplyUnifiedHmiScreenDesignJson instead.")]
+        [McpServerTool(Name = "EnsureUnifiedHmiScreenItem"), Description("[L2][HMI-Unified] Create or verify a single Unified HMI control (button, lamp, IO field, etc.) on a screen. Requires: Connect + OpenProject + EnsureUnifiedHmiScreen. itemType: Button, Rectangle (lamp/indicator), IOField (value display/entry), or full CLR type name. For a complete screen layout use ApplyUnifiedHmiScreenDesignJson instead.")]
         public static ResponseMessage EnsureUnifiedHmiScreenItem(
             [Description("hmiSoftwarePath: path to HMI software (e.g. 'HMI_RT_1')")] string hmiSoftwarePath,
             [Description("screenName: target screen name")] string screenName,
@@ -316,7 +316,7 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
-        [McpServerTool(Name = "ApplyUnifiedHmiScreenDesignJson"), Description("[L2][HMI-Unified] PREFERRED for natural-language HMI design. Apply a complete JSON layout spec to a screen in one call: screen size + multiple controls (Button/Rectangle/IOField/Text) with positions, text, and properties. Use item type \"Text\" (HmiText) for static text labels/titles/field captions — a Rectangle has no Text property and renders blank if given text. Requires: Connect + OpenProject + EnsureUnifiedHmiScreen. Better than calling EnsureUnifiedHmiScreenItem multiple times. Use BuildUnifiedHmiLayoutDesignJson to generate the JSON from a grid description.")]
+        [McpServerTool(Name = "ApplyUnifiedHmiScreenDesignJson"), Description("[L2][HMI-Unified] PREFERRED for natural-language HMI design. Apply a complete JSON layout spec to a screen in one call: screen size + multiple controls (Button/Rectangle/IOField) with positions, text, and properties. Requires: Connect + OpenProject + EnsureUnifiedHmiScreen. Better than calling EnsureUnifiedHmiScreenItem multiple times. Use BuildUnifiedHmiLayoutDesignJson to generate the JSON from a grid description.")]
         public static ResponseMessage ApplyUnifiedHmiScreenDesignJson(
             [Description("hmiSoftwarePath: path to HMI software (e.g. 'HMI_RT_1')")] string hmiSoftwarePath,
             [Description("screenName: target screen name")] string screenName,
@@ -3716,8 +3716,6 @@ namespace TiaMcpServer.ModelContextProtocol
             " Verifies: DownloadProvider service is available, a network/IP configuration exists in the hardware config." +
             " Returns Ready=true only when all checks pass." +
             " Use this before DownloadToPlc to surface problems early (missing IP, no hardware config, etc.)." +
-            " Meta.downloadRoutes lists every PG/PC interface -> CPU route (best-ranked first, preferred=true when the" +
-            " adapter shares a subnet with the CPU) — check it on a multi-NIC PC (WLAN/VPN/PLCSIM) before downloading." +
             " Does NOT compile — run CompileSoftware first to ensure blocks are consistent.")]
         public static ResponseCheckDownload CheckDownloadReadiness(
             [Description("softwarePath: path to the PLC software in the project tree, e.g. 'PLC_1'")] string softwarePath)
@@ -3740,18 +3738,14 @@ namespace TiaMcpServer.ModelContextProtocol
             " Workflow: Connect → OpenProject → CompileSoftware → CheckDownloadReadiness → DownloadToPlc → GetCpuOnlineState." +
             " On success State=Success or Warning. On Error check Errors[] for details." +
             " Default options (keepActualValues=true, consistentBlocksOnly=true) are safe for most scenarios." +
-            " Set keepActualValues=false only when DB initial values must be reset — this is irreversible." +
-            " On a multi-NIC PC the PG/PC interface is picked automatically (the adapter sharing a subnet with the CPU);" +
-            " Meta.pgPcRoute reports which one was used. Override with pgPcInterface / targetIpAddress when the pick is wrong.")]
+            " Set keepActualValues=false only when DB initial values must be reset — this is irreversible.")]
         public static ResponseDownload DownloadToPlc(
             [Description("softwarePath: path to the PLC software, e.g. 'PLC_1'")] string softwarePath,
             [Description("consistentBlocksOnly: true=download only consistent blocks (safe default), false=download all blocks even inconsistent ones")] bool consistentBlocksOnly = true,
             [Description("keepActualValues: true=preserve current DB actual values (safe default), false=reset all DB values to initial values (irreversible)")] bool keepActualValues = true,
             [Description("startAfterDownload: true=automatically set CPU to RUN after download (default), false=leave CPU in STOP")] bool startAfterDownload = true,
             [Description("stopBeforeDownload: true=automatically stop CPU before download (required for most downloads), false=attempt online download without stopping")] bool stopBeforeDownload = true,
-            [Description("password: optional CPU access password. Required when the CPU has download protection configured. Leave empty for unprotected CPUs.")] string password = "",
-            [Description("pgPcInterface: optional PG/PC interface name (substring, case-insensitive), e.g. 'PLCSIM' or 'Realtek'. Leave empty to auto-pick the adapter that shares a subnet with the CPU. Run CheckDownloadReadiness to see the available names.")] string pgPcInterface = "",
-            [Description("targetIpAddress: optional CPU IP to download to, e.g. '192.168.0.1'. Disambiguates which route to use when the project has several CPU interfaces. Leave empty to auto-pick.")] string targetIpAddress = "")
+            [Description("password: optional CPU access password. Required when the CPU has download protection configured. Leave empty for unprotected CPUs.")] string password = "")
         {
             try
             {
@@ -3761,9 +3755,7 @@ namespace TiaMcpServer.ModelContextProtocol
                     keepActualValues,
                     startAfterDownload,
                     stopBeforeDownload,
-                    string.IsNullOrWhiteSpace(password) ? null : password,
-                    string.IsNullOrWhiteSpace(pgPcInterface) ? null : pgPcInterface,
-                    string.IsNullOrWhiteSpace(targetIpAddress) ? null : targetIpAddress);
+                    string.IsNullOrWhiteSpace(password) ? null : password);
 
                 if (result.Ok == false && result.Errors != null && result.Errors.Length > 0)
                     throw new McpException(
